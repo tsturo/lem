@@ -2,27 +2,35 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
 *.egg-info/
+*.egg
+build/
+dist/
+sdist/
+wheels/
+
+# Virtualenvs
 .venv/
 venv/
 env/
+
+# Tooling caches
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-dist/
-build/
+.pyright/
 
-# OS
+# lem workspace
+.lem/
+
+# OS / editor
 .DS_Store
-Thumbs.db
-
-# IDEs
-.vscode/
+*.swp
 .idea/
+.vscode/
 
 # Env
 .env
 .env.local
-
-# lem runtime
-.lem/
