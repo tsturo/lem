@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Reads stdin (the user prompt) and emits a valid JSON envelope whose "result"
+# field contains a JSON-encoded object with argv and stdin. Tests use this to
+# verify command-line construction and prompt assembly.
+#
+# Stdin is captured to a temp file first so the python3 -c invocation can read
+# it (bash heredocs consume stdin before the child process starts).
+stdin_tmp=$(mktemp)
+cat > "$stdin_tmp"
+
+python3 - "$@" "$stdin_tmp" <<'PYEOF'
+import json, sys
+
+args = sys.argv[1:-1]          # last arg is the tmp file path
+stdin_file = sys.argv[-1]
+with open(stdin_file) as fh:
+    stdin_content = fh.read()
+
+inner = json.dumps({"args": args, "stdin": stdin_content})
+
+envelope = {
+    "type": "result",
+    "subtype": "success",
+    "is_error": False,
+    "result": inner,
+    "stop_reason": "end_turn",
+    "session_id": "echo-session",
+    "total_cost_usd": 0.0,
+    "duration_ms": 1,
+    "duration_api_ms": 1,
+    "usage": {
+        "input_tokens": 1,
+        "output_tokens": 1,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+}
+print(json.dumps(envelope))
+PYEOF
+
+rm -f "$stdin_tmp"
