@@ -7,7 +7,7 @@ but the parser should not crash on it.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 import yaml
 
@@ -45,7 +45,10 @@ def parse(text: str) -> ParsedDocument:
 
 def parse_file(path: Path) -> ParsedDocument:
     """Parse a markdown file. Includes path in error messages."""
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path}: not valid UTF-8") from exc
     try:
         return parse(text)
     except FrontmatterError as exc:
@@ -82,9 +85,11 @@ def _parse_yaml_block(raw: str, fence_line: int) -> dict[str, object]:
     if not isinstance(result, dict):
         raise MalformedYAML(
             f"frontmatter must be a YAML mapping, got {type(result).__name__}",
-            line=1,
+            line=fence_line,
         )
-    return result  # type: ignore[return-value]
+    if not all(isinstance(k, str) for k in result):
+        raise MalformedYAML("frontmatter keys must be strings", line=fence_line)
+    return cast("dict[str, object]", result)
 
 
 def _extract_sections(body: str) -> dict[str, str]:
@@ -96,9 +101,12 @@ def _extract_sections(body: str) -> dict[str, str]:
 
     for line in lines:
         stripped = line.rstrip("\n\r")
-
-        if stripped.startswith("```"):
+        # Fence markers may be indented per CommonMark; H2 must start at column 0.
+        if stripped.lstrip(" ").startswith("```"):
             in_fence = not in_fence
+            if current_heading is not None:
+                current_lines.append(line)
+            continue
 
         if not in_fence and stripped.startswith("## "):
             if current_heading is not None:

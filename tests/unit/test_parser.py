@@ -98,7 +98,7 @@ def test_malformed_yaml_raises() -> None:
 def test_malformed_yaml_has_line_info() -> None:
     with pytest.raises(MalformedYAML) as exc_info:
         parse_file(FIXTURES / "malformed_yaml.md")
-    assert exc_info.value.line is not None
+    assert exc_info.value.line >= 2
 
 
 def test_malformed_yaml_inline() -> None:
@@ -124,7 +124,39 @@ def test_unterminated_inline() -> None:
 def test_unterminated_has_line_info() -> None:
     with pytest.raises(UnterminatedFrontmatter) as exc_info:
         parse("---\nname: foo\n")
-    assert exc_info.value.line is not None
+    assert exc_info.value.line == 1
+
+
+def test_indented_fence_treated_as_fence() -> None:
+    text = (
+        "---\nname: foo\n---\n\n"
+        "## Real\n"
+        "content\n\n"
+        "  ```\n"
+        "  ## NotASection\n"
+        "  ```\n\n"
+        "after fence\n"
+    )
+    doc = parse(text)
+    assert "Real" in doc.sections
+    assert "NotASection" not in doc.sections
+
+
+def test_non_string_yaml_keys_raise() -> None:
+    text = "---\n1: foo\n2: bar\n---\nbody\n"
+    with pytest.raises(MalformedYAML) as exc_info:
+        parse(text)
+    assert "keys must be strings" in str(exc_info.value)
+
+
+def test_non_utf8_file_raises_with_path(tmp_path: object) -> None:
+    from pathlib import Path
+
+    p = Path(str(tmp_path)) / "bad.md"
+    p.write_bytes(b"---\nname: foo\n---\n\xff\xfe not utf8")
+    with pytest.raises(ValueError, match="not valid UTF-8") as exc_info:
+        parse_file(p)
+    assert "bad.md" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------
