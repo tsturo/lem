@@ -174,6 +174,7 @@ def test_phase_spec_with_gate_fn() -> None:
         gate_fn=gate_fn,
     )
     assert spec.gate_fn is not None
+    assert spec.gate_fn(make_run_state()) is True
 
 
 def test_phase_spec_frozen() -> None:

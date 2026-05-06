@@ -5,7 +5,7 @@ CostEvent, LogEvent."""
 import dataclasses
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -45,7 +45,7 @@ class RunState:
     started_at: float
     last_event_at: float
     cost_so_far: float
-    error: Optional[str]
+    error: str | None
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -54,7 +54,7 @@ class Role:
     description: str
     model: Literal["haiku", "sonnet", "opus"]
     worker: Literal["cli"]
-    phase: Optional[str]
+    phase: str | None
     output_cap: int
     timeout_s: int
     branchable: Literal["yes", "no", "conditional"]
@@ -82,9 +82,9 @@ class Profile:
 class PhaseSpec:
     id: str
     name: str
-    workers_fn: Callable[["RunState", Profile], list[WorkerInvocation]]
+    workers_fn: Callable[[RunState, Profile], list[WorkerInvocation]]
     parallel: bool
-    gate_fn: Optional[Callable[["RunState"], bool]] = None
+    gate_fn: Callable[[RunState], bool] | None = None
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -106,7 +106,8 @@ class LogEvent:
     timestamp: float
     level: Literal["debug", "info", "warning", "error"]
     event: str
-    phase: Optional[str] = None
-    role: Optional[str] = None
+    phase: str | None = None
+    role: str | None = None
     message: str = ""
+    # Lambda factory: pyright strict infers dict[Unknown, Unknown] from bare `dict`.
     extra: dict[str, Any] = dataclasses.field(default_factory=lambda: {})
