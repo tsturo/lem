@@ -38,11 +38,12 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from lem.types import WorkerInvocation, WorkerResult
 
 _AUTH_EXIT_CODE = 69
+_StopReason = Literal["end_turn", "max_tokens", "timeout", "error"]
 
 
 def invoke(
@@ -166,9 +167,9 @@ def _parse_result(
 
     usage = envelope.get("usage") or {}
     raw_stop = envelope.get("stop_reason", "error")
-    stop_reason: WorkerResult.__dataclass_fields__["stop_reason"].type  # type: ignore[index]
+    stop_reason: _StopReason
     if raw_stop in ("end_turn", "max_tokens", "timeout", "error"):
-        stop_reason = raw_stop  # type: ignore[assignment]
+        stop_reason = raw_stop
     elif proc.returncode != 0:
         stop_reason = "error"
     else:
@@ -193,6 +194,7 @@ def _parse_result(
 
 
 def _write_atomic(output_path: Path, text: str) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = output_path.with_suffix(output_path.suffix + ".tmp")
     tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, output_path)

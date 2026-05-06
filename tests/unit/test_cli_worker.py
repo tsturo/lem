@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ def make_invocation(
     tmp_path: Path,
     *,
     model: str = "sonnet",
+    output_path: Path | None = None,
     allowed_read_paths: list[Path] | None = None,
     extra_context: dict[str, str] | None = None,
     max_output_tokens: int = 1024,
@@ -25,7 +27,7 @@ def make_invocation(
     return WorkerInvocation(
         role_path=tmp_path / "role.md",
         workspace_path=tmp_path,
-        output_path=tmp_path / "output.json",
+        output_path=output_path or tmp_path / "output.json",
         allowed_read_paths=allowed_read_paths or [],
         model=model,  # type: ignore[arg-type]
         max_output_tokens=max_output_tokens,
@@ -150,25 +152,46 @@ def test_malformed_json_does_not_crash(
 # ---------------------------------------------------------------------------
 
 
-def _parse_echo_result(result: WorkerResult) -> dict[str, object]:
-    text = result.output_path.read_text(encoding="utf-8")
-    return json.loads(text)  # type: ignore[no-any-return]
-
-
 def test_cmd_output_format_json_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("LEM_CLAUDE_BIN", str(STUBS / "claude_echo_args"))
     inv = make_invocation(tmp_path)
-    cli_worker.invoke(inv, system_prompt="sys", allowed_tools=[])
-
-    echo = _parse_echo_result(make_invocation(tmp_path))
     result = cli_worker.invoke(inv, system_prompt="sys", allowed_tools=[])
     args = json.loads(result.output_path.read_text())["args"]
 
+    assert "--print" in args
     assert "--output-format" in args
-    idx = args.index("--output-format")
-    assert args[idx + 1] == "json"
+    assert args[args.index("--output-format") + 1] == "json"
+
+
+def test_timeout_returns_timeout_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_run(*_args: object, **_kwargs: object) -> object:
+        raise subprocess.TimeoutExpired(cmd="claude", timeout=30)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    inv = make_invocation(tmp_path, timeout_s=30)
+    result = cli_worker.invoke(inv, system_prompt="sys", allowed_tools=[])
+
+    assert result.stop_reason == "timeout"
+    assert result.duration_s == pytest.approx(30.0)
+    assert result.exit_code == -1
+    assert result.tokens_in == 0
+    assert result.tokens_out == 0
+
+
+def test_write_atomic_creates_missing_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LEM_CLAUDE_BIN", str(STUBS / "claude_success"))
+    nested = tmp_path / "deeply" / "nested" / "out.md"
+    inv = make_invocation(tmp_path, output_path=nested)
+    result = cli_worker.invoke(inv, system_prompt="sys", allowed_tools=[])
+
+    assert result.exit_code == 0
+    assert nested.exists()
 
 
 def test_cmd_model_flag(
