@@ -168,10 +168,20 @@ def test_cmd_output_format_json_present(
 def test_timeout_returns_timeout_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def fake_run(*_args: object, **_kwargs: object) -> object:
-        raise subprocess.TimeoutExpired(cmd="claude", timeout=30)
+    import signal as _signal
+    import subprocess as _subprocess
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    def fake_escalation(
+        cmd: object, *, timeout_s: int, **_kwargs: object
+    ) -> _subprocess.CompletedProcess[str]:
+        return _subprocess.CompletedProcess(
+            args=cmd,
+            returncode=-_signal.SIGTERM,
+            stdout="",
+            stderr="",
+        )
+
+    monkeypatch.setattr("lem.workers.cli_worker.run_with_escalation", fake_escalation)
     inv = make_invocation(tmp_path, timeout_s=30)
     result = cli_worker.invoke(inv, system_prompt="sys", allowed_tools=[])
 

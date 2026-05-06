@@ -36,14 +36,17 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import subprocess
 from pathlib import Path
 from typing import Any, Literal
 
+from lem.failure.timeout import run_with_escalation
 from lem.types import WorkerInvocation, WorkerResult
 
 _AUTH_EXIT_CODE = 69
 _StopReason = Literal["end_turn", "max_tokens", "timeout", "error"]
+_TIMEOUT_RETURNCODES = frozenset({-signal.SIGTERM, -signal.SIGKILL})
 
 
 def invoke(
@@ -59,16 +62,14 @@ def invoke(
     user_prompt = _build_user_prompt(inv)
     cmd = _build_command(inv, system_prompt, allowed_tools)
 
-    try:
-        proc = subprocess.run(
-            cmd,
-            input=user_prompt,
-            capture_output=True,
-            text=True,
-            cwd=inv.workspace_path,
-            timeout=inv.timeout_s,
-        )
-    except subprocess.TimeoutExpired:
+    proc = run_with_escalation(
+        cmd,
+        timeout_s=inv.timeout_s,
+        input=user_prompt,
+        cwd=inv.workspace_path,
+    )
+
+    if proc.returncode in _TIMEOUT_RETURNCODES:
         return WorkerResult(
             exit_code=-1,
             output_path=inv.output_path,
