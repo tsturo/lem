@@ -61,4 +61,7 @@ MODULES = [
 
 @pytest.mark.parametrize("module", MODULES)
 def test_module_importable(module: str) -> None:
-    importlib.import_module(module)
+    try:
+        importlib.import_module(module)
+    except ImportError as exc:
+        pytest.fail(f"Module '{module}' is not importable: {exc}")
