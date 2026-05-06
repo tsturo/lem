@@ -6,6 +6,10 @@ Supported exit_criteria DSL keys (per section):
 
 Any other exit_criteria key produces an 'unsupported exit criterion' error so
 role authors catch typos rather than silently skipping checks.
+
+Placeholder line numbers are body-relative (see _find_placeholders): line 1 is
+the first line after the frontmatter's closing fence, not line 1 of the source
+file. Error messages say "body line N" to make the coordinate system explicit.
 """
 
 from __future__ import annotations
@@ -19,7 +23,7 @@ _PLACEHOLDER_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("<TBD>", re.compile(r"<TBD>", re.IGNORECASE)),
     ("<placeholder>", re.compile(r"<placeholder>", re.IGNORECASE)),
     ("[TODO]", re.compile(r"\[TODO\]", re.IGNORECASE)),
-    ("<...>", re.compile(r"<\.\.\.>")),
+    ("<...>", re.compile(r"<\.\.\.>", re.IGNORECASE)),
 ]
 
 _TYPE_MAP: dict[str, type] = {
@@ -38,9 +42,10 @@ class ValidationResult(NamedTuple):
 
 def validate(doc: ParsedDocument, schema: dict[str, object]) -> ValidationResult:
     """Validate a parsed document against a role's output_schema."""
+    enum_table = _build_enum_table(schema)
     errors: list[str] = []
-    errors.extend(_validate_frontmatter(doc.frontmatter, schema))
-    errors.extend(_validate_enums(doc.frontmatter, schema))
+    errors.extend(_validate_frontmatter(doc.frontmatter, schema, enum_table))
+    errors.extend(_validate_enums(doc.frontmatter, enum_table))
     errors.extend(_validate_sections(doc.sections, schema))
     errors.extend(_find_placeholders(doc.body))
     return ValidationResult(valid=len(errors) == 0, errors=errors)
@@ -57,7 +62,9 @@ def _build_enum_table(schema: dict[str, object]) -> dict[str, list[str]]:
 
 
 def _validate_frontmatter(
-    frontmatter: dict[str, object], schema: dict[str, object]
+    frontmatter: dict[str, object],
+    schema: dict[str, object],
+    enum_table: dict[str, list[str]],
 ) -> list[str]:
     errors: list[str] = []
     required = schema.get("required_frontmatter")
@@ -74,8 +81,6 @@ def _validate_frontmatter(
 
     if not isinstance(required, dict):
         return errors
-
-    enum_table = _build_enum_table(schema)
 
     for key, type_spec in required.items():
         if not isinstance(key, str):
@@ -109,11 +114,11 @@ def _validate_frontmatter(
 
 
 def _validate_enums(
-    frontmatter: dict[str, object], schema: dict[str, object]
+    frontmatter: dict[str, object],
+    enum_table: dict[str, list[str]],
 ) -> list[str]:
     """Enforce the `enums` table independently of `required_frontmatter` form."""
     errors: list[str] = []
-    enum_table = _build_enum_table(schema)
     for key, allowed in enum_table.items():
         if key not in frontmatter:
             continue
@@ -197,6 +202,7 @@ def _count_bullets(text: str) -> int:
 
 
 def _find_placeholders(body: str) -> list[str]:
+    """Body-relative line numbers: 1 is the first line after the closing ---."""
     errors: list[str] = []
     lines = body.splitlines()
     in_fence = False
@@ -207,7 +213,9 @@ def _find_placeholders(body: str) -> list[str]:
             continue
         if in_fence:
             continue
-        for label, pattern in _PLACEHOLDER_PATTERNS:
+        for _label, pattern in _PLACEHOLDER_PATTERNS:
             for match in pattern.finditer(line):
-                errors.append(f"placeholder '{match.group()}' found at line {lineno}")
+                errors.append(
+                    f"placeholder '{match.group()}' found at body line {lineno}"
+                )
     return errors
