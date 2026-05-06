@@ -40,9 +40,20 @@ def validate(doc: ParsedDocument, schema: dict[str, object]) -> ValidationResult
     """Validate a parsed document against a role's output_schema."""
     errors: list[str] = []
     errors.extend(_validate_frontmatter(doc.frontmatter, schema))
+    errors.extend(_validate_enums(doc.frontmatter, schema))
     errors.extend(_validate_sections(doc.sections, schema))
     errors.extend(_find_placeholders(doc.body))
     return ValidationResult(valid=len(errors) == 0, errors=errors)
+
+
+def _build_enum_table(schema: dict[str, object]) -> dict[str, list[str]]:
+    enums: object = schema.get("enums")
+    table: dict[str, list[str]] = {}
+    if isinstance(enums, dict):
+        for k, v in enums.items():
+            if isinstance(k, str) and isinstance(v, list):
+                table[k] = [str(item) for item in v]
+    return table
 
 
 def _validate_frontmatter(
@@ -64,12 +75,7 @@ def _validate_frontmatter(
     if not isinstance(required, dict):
         return errors
 
-    enums: object = schema.get("enums")
-    enum_table: dict[str, list[str]] = {}
-    if isinstance(enums, dict):
-        for k, v in enums.items():
-            if isinstance(k, str) and isinstance(v, list):
-                enum_table[k] = [str(item) for item in v]
+    enum_table = _build_enum_table(schema)
 
     for key, type_spec in required.items():
         if not isinstance(key, str):
@@ -77,32 +83,45 @@ def _validate_frontmatter(
         if key not in frontmatter:
             errors.append(f"required frontmatter key '{key}' missing")
             continue
-
-        value = frontmatter[key]
-
         if not isinstance(type_spec, str):
             continue
 
+        # Per-value enum membership is enforced by _validate_enums; here we only
+        # report the schema-author error of declaring `enum` without a table entry.
         if type_spec == "enum":
             if key not in enum_table:
                 errors.append(
                     f"frontmatter '{key}' declared as enum but"
                     f" '{key}' not found in enums table"
                 )
-            else:
-                allowed = enum_table[key]
-                if str(value) not in allowed:
-                    errors.append(
-                        f"frontmatter '{key}' must be one of {allowed}, got '{value}'"
-                    )
-        elif type_spec in _TYPE_MAP:
+            continue
+
+        if type_spec in _TYPE_MAP:
             expected_type = _TYPE_MAP[type_spec]
+            value = frontmatter[key]
             if not isinstance(value, expected_type):
                 actual = type(value).__name__
                 errors.append(
                     f"frontmatter '{key}' must be {type_spec}, got {actual}"
                 )
 
+    return errors
+
+
+def _validate_enums(
+    frontmatter: dict[str, object], schema: dict[str, object]
+) -> list[str]:
+    """Enforce the `enums` table independently of `required_frontmatter` form."""
+    errors: list[str] = []
+    enum_table = _build_enum_table(schema)
+    for key, allowed in enum_table.items():
+        if key not in frontmatter:
+            continue
+        value = frontmatter[key]
+        if str(value) not in allowed:
+            errors.append(
+                f"frontmatter '{key}' must be one of {allowed}, got '{value}'"
+            )
     return errors
 
 

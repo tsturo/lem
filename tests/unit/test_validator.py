@@ -361,7 +361,20 @@ def test_multiple_failures_all_reported() -> None:
         has_placeholder,
         has_type_error,
     ]
-    assert sum(failure_flags) >= 3
+    assert all(failure_flags), f"missing failure categories: {failure_flags}"
+
+
+def test_enums_enforced_with_list_form_required_frontmatter() -> None:
+    doc = parse(
+        "---\nname: example\nsaturation: extreme\n---\nbody\n"
+    )
+    schema: dict[str, object] = {
+        "required_frontmatter": ["name", "saturation"],
+        "enums": {"saturation": ["low", "medium", "high"]},
+    }
+    result = validate(doc, schema)
+    assert not result.valid
+    assert any("saturation" in e and "extreme" in e for e in result.errors)
 
 
 # ---------------------------------------------------------------------------
