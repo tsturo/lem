@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ run_id }} — lem report</title>
+<style>
+  :root { --bg: #0f1117; --surface: #1a1d27; --border: #2d3148; --text: #e2e8f0; --muted: #8892a4; --accent: #6c8ebf; --green: #4caf50; --red: #ef5350; --yellow: #ffb74d; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 15px; line-height: 1.6; padding: 2rem; }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  header h1 { font-size: 1.5rem; color: var(--accent); }
+  header .meta { color: var(--muted); font-size: 0.875rem; margin-top: 0.5rem; }
+  .status-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+  .status-completed { background: #1b4332; color: var(--green); }
+  .status-running { background: #1a2a44; color: var(--accent); }
+  .status-failed, .status-cancelled, .status-cost-aborted, .status-wall-clock-aborted { background: #3b1515; color: var(--red); }
+  section { margin-bottom: 2.5rem; }
+  section h2 { font-size: 1.1rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 1rem; }
+  .markdown-body { line-height: 1.7; }
+  .markdown-body h1 { font-size: 1.4rem; margin: 1rem 0 0.5rem; }
+  .markdown-body h2 { font-size: 1.2rem; margin: 0.9rem 0 0.4rem; color: var(--text); border: none; }
+  .markdown-body h3 { font-size: 1rem; margin: 0.8rem 0 0.3rem; }
+  .markdown-body p { margin-bottom: 0.8rem; }
+  .markdown-body ul, .markdown-body ol { padding-left: 1.5rem; margin-bottom: 0.8rem; }
+  .markdown-body li { margin-bottom: 0.25rem; }
+  .markdown-body code { background: var(--surface); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.875em; }
+  .markdown-body pre { background: var(--surface); padding: 1rem; border-radius: 6px; overflow-x: auto; margin-bottom: 1rem; }
+  .markdown-body pre code { background: none; padding: 0; }
+  .markdown-body blockquote { border-left: 3px solid var(--border); padding-left: 1rem; color: var(--muted); margin-bottom: 0.8rem; }
+  .markdown-body strong { font-weight: 600; }
+  .markdown-body em { font-style: italic; }
+  .chart-row { display: flex; gap: 2rem; flex-wrap: wrap; }
+  .chart-wrap { flex: 1; min-width: 280px; }
+  .chart-wrap h3 { font-size: 0.9rem; color: var(--muted); margin-bottom: 0.75rem; }
+  svg.chart { width: 100%; height: 160px; background: var(--surface); border-radius: 6px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .stat-card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-card .value { font-size: 1.4rem; font-weight: 700; margin-top: 0.25rem; }
+  .deliverable-list { list-style: none; }
+  .deliverable-list li { padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+  .deliverable-list li:last-child { border-bottom: none; }
+  .deliverable-list .found { color: var(--green); }
+  .deliverable-list .missing { color: var(--muted); }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.8rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>{{ run_id }}</h1>
+    <div class="meta">
+      <span class="status-badge status-{{ status_css }}">{{ status }}</span>
+      &nbsp; started {{ started_at_fmt }} &nbsp;|&nbsp; ${{ "%.4f"|format(cost) }} USD
+    </div>
+  </header>
+
+  <section>
+    <h2>Run statistics</h2>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="label">Status</div><div class="value">{{ status }}</div></div>
+      <div class="stat-card"><div class="label">Phase</div><div class="value">{{ phase }}</div></div>
+      <div class="stat-card"><div class="label">Total cost</div><div class="value">${{ "%.4f"|format(cost) }}</div></div>
+      <div class="stat-card"><div class="label">Duration</div><div class="value">{{ duration_fmt }}</div></div>
+    </div>
+  </section>
+
+  {% if phase_costs %}
+  <section>
+    <h2>Cost by phase</h2>
+    <div class="chart-row">
+      <div class="chart-wrap">
+        <h3>Cost per phase (USD)</h3>
+        {{ cost_chart_svg }}
+      </div>
+      <div class="chart-wrap">
+        <h3>Duration per phase (s)</h3>
+        {{ duration_chart_svg }}
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if deliverables %}
+  <section>
+    <h2>Deliverables</h2>
+    <ul class="deliverable-list">
+      {% for d in deliverables %}
+      <li class="{{ 'found' if d.exists else 'missing' }}">
+        {{ '✓' if d.exists else '—' }} {{ d.name }}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if executive_summary_html %}
+  <section>
+    <h2>Executive summary</h2>
+    <div class="markdown-body">{{ executive_summary_html }}</div>
+  </section>
+  {% endif %}
+
+  <footer>Generated by lem &nbsp;|&nbsp; {{ generated_at }}</footer>
+</div>
+</body>
+</html>
