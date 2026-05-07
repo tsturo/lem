@@ -119,6 +119,36 @@ def read_cost(workspace_path: Path) -> Iterator[CostEvent]:
                 )
 
 
+_HEX6_CHARS = frozenset("0123456789abcdef")
+
+
+def _extract_role(stem: str, phase: str, payload: dict[str, Any]) -> str | None:
+    """Resolve the role for a meta/events/* file.
+
+    Prefer payload['role'] when present (orchestrator-supplied truth). Fall back
+    to filename parse: format is `<phase>-<role>-<unix_ms>(-<6hex>)?`. Naive
+    split('-')[1] truncates hyphenated role names (cross-skeptic, branch-skeptic,
+    kill-case-skeptic), so reconstruct by dropping the trailing timestamp and
+    optional collision suffix instead.
+    """
+    payload_role = payload.get("role")
+    if isinstance(payload_role, str) and payload_role:
+        return payload_role
+    parts = stem.split("-")
+    if len(parts) < 3:
+        return None
+    last = parts[-1]
+    has_collision = (
+        len(parts) >= 4
+        and len(last) == 6
+        and all(c in _HEX6_CHARS for c in last)
+    )
+    role_parts = parts[1:-2] if has_collision else parts[1:-1]
+    if not role_parts:
+        return None
+    return "-".join(role_parts)
+
+
 def aggregate_phase(
     workspace_path: Path, phase: str, run_id: str
 ) -> list[CostEvent]:
@@ -126,11 +156,6 @@ def aggregate_phase(
     events_dir = workspace_path / "meta" / "events"
     results: list[CostEvent] = []
     for event_file in sorted(events_dir.glob(f"{phase}-*.json")):
-        stem = event_file.stem
-        parts = stem.split("-")
-        if len(parts) < 2:
-            continue
-        role = parts[1]
         try:
             payload: dict[str, Any] = json.loads(event_file.read_text(encoding="utf-8"))
         except Exception as exc:
@@ -138,6 +163,9 @@ def aggregate_phase(
                 f"aggregate_phase: skipping {event_file.name}: {exc}",
                 file=sys.stderr,
             )
+            continue
+        role = _extract_role(event_file.stem, phase, payload)
+        if role is None:
             continue
         tokens_in = int(payload.get("tokens_in", 0))
         tokens_out = int(payload.get("tokens_out", 0))

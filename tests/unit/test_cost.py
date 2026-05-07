@@ -195,6 +195,19 @@ def test_aggregate_phase_returns_correct_count(tmp_path: Path) -> None:
     assert len(events) == 3
 
 
+def test_aggregate_phase_preserves_hyphenated_roles(tmp_path: Path) -> None:
+    """Regression: role names with hyphens (cross-skeptic, kill-case-skeptic) must
+    round-trip without truncation. Earlier filename-only parse split on '-' and
+    took parts[1], silently dropping everything after the first hyphen."""
+    _write_event_payload(tmp_path, phase="critique", role="cross-skeptic")
+    _write_event_payload(tmp_path, phase="critique", role="kill-case-skeptic")
+    _write_event_payload(tmp_path, phase="critique", role="branch-skeptic")
+
+    results = aggregate_phase(tmp_path, "critique", "run-1")
+    roles = {e.role for e in results}
+    assert roles == {"cross-skeptic", "kill-case-skeptic", "branch-skeptic"}
+
+
 def test_aggregate_phase_only_matches_requested_phase(tmp_path: Path) -> None:
     _write_event_payload(tmp_path, phase="discover", role="alpha")
     _write_event_payload(tmp_path, phase="synthesize", role="beta")
