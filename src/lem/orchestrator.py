@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from lem.control import ControlAction, clear_control, read_control
+from lem.failure import breaker
 from lem.failure.ceiling import check_wall_clock
 from lem.phases import PHASES
 from lem.state.cost import aggregate_phase, run_total
@@ -80,12 +81,10 @@ def run_orchestrator(
 
             aggregate_phase(workspace_path, phase.id, state.run_id)
 
-            failure_rate = sum(
-                1 for r in results if r.exit_code != 0 or not r.schema_valid
-            ) / max(1, len(results))
-            if failure_rate > 0.5:
+            verdict = breaker.evaluate_phase(phase.id, results)
+            if verdict.should_abort:
                 state.status = "failed"
-                state.error = f"phase {phase.id} failure rate {failure_rate:.0%}"
+                state.error = verdict.reason
                 break
 
             state.phase = phase.id
