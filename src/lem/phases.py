@@ -342,10 +342,15 @@ def _synthesize_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvo
             pass
 
     decisions = [state.workspace_path / s / "decision.md" for s in profile.specialists]
+    archive_paths: list[Path] = []
+    for s in profile.specialists:
+        archive_dir = state.workspace_path / s / "_archive"
+        if archive_dir.exists():
+            archive_paths.extend(p for p in archive_dir.iterdir() if p.is_file())
     return [WorkerInvocation(
         role_path=profile.source_dir.parent / "process_roles" / "synthesizer.md",
         workspace_path=state.workspace_path,
-        output_path=state.workspace_path / "deliverables" / "executive-summary.md",
+        output_path=state.workspace_path / "meta" / "synthesis.md",
         allowed_read_paths=[
             state.workspace_path / "idea.md",
             state.workspace_path / "assumptions.yaml",
@@ -355,6 +360,7 @@ def _synthesize_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvo
             state.workspace_path / "cross-critique.md",
             state.workspace_path / "kill-case.md",
             *(d for d in decisions if d.exists()),
+            *archive_paths,
         ],
         model="opus",
         max_output_tokens=8000,

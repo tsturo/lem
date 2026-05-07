@@ -140,7 +140,7 @@ def post_synthesize_verdict_check(
     deliverable = (
         target_path
         if target_path is not None
-        else state.workspace_path / "deliverables" / "executive-summary.md"
+        else state.workspace_path / "meta" / "synthesis.md"
     )
     if not deliverable.exists():
         return False

@@ -61,11 +61,20 @@ def refine(
         skip=skip_intake,
     )
 
+    requested_flags: set[str] = set()
+    if with_pitch:
+        requested_flags.add("--with-pitch")
+    if with_roadmap:
+        requested_flags.add("--with-roadmap")
+    if with_techstack:
+        requested_flags.add("--with-techstack")
+
     config = OrchestratorConfig(
         max_concurrent=max_concurrent,
         max_cost=max_cost,
         max_wall_clock_s=max_wall_clock,
         webhook_url=webhook,
+        requested_flags=frozenset(requested_flags),
     )
 
     if attach:

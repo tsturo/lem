@@ -59,7 +59,7 @@ def _write_summary(
     recommendation: str,
     confidence: str = "medium",
 ) -> Path:
-    out = ws / "deliverables" / "executive-summary.md"
+    out = ws / "meta" / "synthesis.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         f"---\n"

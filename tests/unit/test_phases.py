@@ -679,14 +679,14 @@ def test_synthesize_model_is_opus(tmp_path: Path) -> None:
     assert inv.model == "opus"
 
 
-def test_synthesize_output_is_executive_summary(tmp_path: Path) -> None:
+def test_synthesize_output_is_meta_synthesis(tmp_path: Path) -> None:
     profile = _make_profile_with_specialists(
         tmp_path / "profiles" / "app-idea", []
     )
     ws = tmp_path / "workspace"
     state = _make_state(ws)
     inv = get_phase("4").workers_fn(state, profile)[0]
-    assert inv.output_path == ws / "deliverables" / "executive-summary.md"
+    assert inv.output_path == ws / "meta" / "synthesis.md"
 
 
 def test_synthesize_verdict_free_choice_when_no_assumptions(tmp_path: Path) -> None:

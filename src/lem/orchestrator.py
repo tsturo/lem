@@ -22,6 +22,7 @@ from lem.hooks import fire_on_complete, fire_on_error, load_hook_config, post_we
 from lem.notify import notify
 from lem.phases import PHASES, archive_pruner_losers
 from lem.post_synthesis import post_synthesize_verdict_check
+from lem.render.deliverables import render_deliverables
 from lem.state.cost import aggregate_phase, run_total
 from lem.state.events import write_event
 from lem.state.log import append_log
@@ -45,6 +46,10 @@ class OrchestratorConfig:
     on_complete: Callable[[RunState], None] | None = None
     on_error: Callable[[RunState], None] | None = None
     webhook_url: str | None = None
+    # Flags forwarded to the deliverable render pass to enable flag-gated
+    # deliverables. Members map to keys in profile.flag_gated_deliverables
+    # (e.g. "--with-pitch", "--with-roadmap", "--with-techstack").
+    requested_flags: frozenset[str] = frozenset()
 
 
 def run_orchestrator(
@@ -117,7 +122,16 @@ def run_orchestrator(
                 archive_pruner_losers(state, profile)
 
             if phase.id == "4":
-                post_synthesize_verdict_check(state, profile)
+                downgraded = post_synthesize_verdict_check(state, profile)
+                # Render after the verdict-check so meta/synthesis.md is the
+                # authoritative source for both the recommendation field and
+                # the rendered deliverables.
+                render_deliverables(
+                    workspace_path,
+                    profile,
+                    requested_flags=set(cfg.requested_flags),
+                )
+                _ = downgraded
 
             verdict = breaker.evaluate_phase(phase.id, results)
             if verdict.should_abort:
