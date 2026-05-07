@@ -9,10 +9,12 @@ from lem.phases import PHASES, get_phase, next_phase, phase_index
 from lem.types import Profile, Role, RunState, WorkerInvocation
 
 
-_EXPECTED_IDS = ["0", "0.5", "1", "1.5", "1.6", "2", "2.5", "3", "4"]
+_EXPECTED_IDS = [
+    "0", "0.5", "1", "1.5", "1.6", "2.1", "2.2", "2.3", "2.5", "3", "4",
+]
 _EXPECTED_NAMES = [
     "Intake", "JTBD", "Discover", "Disagreement", "Reframe",
-    "Explore", "Distill", "Critique", "Synthesize",
+    "Explore", "Explore", "Explore", "Distill", "Critique", "Synthesize",
 ]
 
 
@@ -62,7 +64,7 @@ def _make_profile() -> Profile:
 
 
 def test_phases_count() -> None:
-    assert len(PHASES) == 9
+    assert len(PHASES) == 11
 
 
 def test_phases_ids_in_order() -> None:
@@ -76,15 +78,18 @@ def test_phases_names_in_order() -> None:
 def test_parallel_flags() -> None:
     parallel_by_id = {p.id: p.parallel for p in PHASES}
     assert parallel_by_id["1"] is True    # Discover
-    assert parallel_by_id["2"] is True    # Explore
+    assert parallel_by_id["2.1"] is True  # Explore-generate
+    assert parallel_by_id["2.2"] is True  # Explore-critique
+    assert parallel_by_id["2.3"] is True  # Explore-prune
     for phase_id, flag in parallel_by_id.items():
-        if phase_id not in ("1", "2"):
+        if phase_id not in ("1", "2.1", "2.2", "2.3"):
             assert flag is False, f"phase {phase_id} should not be parallel"
 
 
 def test_non_explore_gate_fns_are_none() -> None:
+    explore_ids = {"2.1", "2.2", "2.3"}
     for phase in PHASES:
-        if phase.id != "2":
+        if phase.id not in explore_ids:
             assert phase.gate_fn is None, f"phase {phase.id} should have gate_fn=None"
 
 
@@ -342,7 +347,7 @@ def _write_disagreements(ws: Path, axes: dict[str, str]) -> None:
     (ws / "disagreements.md").write_text("\n".join(lines), encoding="utf-8")
 
 
-def test_explore_branching_domain_returns_five_invocations(tmp_path: Path) -> None:
+def test_explore_generate_returns_two_invocations_per_domain(tmp_path: Path) -> None:
     ws = tmp_path / "workspace"
     ws.mkdir()
     _write_disagreements(ws, {"alpha": "cost vs speed"})
@@ -352,60 +357,62 @@ def test_explore_branching_domain_returns_five_invocations(tmp_path: Path) -> No
         tmp_path / "profiles" / "app-idea", ["alpha"]
     )
     state = _make_state(ws)
-    result = get_phase("2").workers_fn(state, profile)
-    assert len(result) == 5
-
-
-def test_explore_branching_output_paths(tmp_path: Path) -> None:
-    ws = tmp_path / "workspace"
-    ws.mkdir()
-    _write_disagreements(ws, {"alpha": "cost vs speed"})
-    (ws / "alpha").mkdir()
-    (ws / "alpha" / "draft-1.md").write_text("draft", encoding="utf-8")
-    profile = _make_profile_with_specialists(
-        tmp_path / "profiles" / "app-idea", ["alpha"]
-    )
-    state = _make_state(ws)
-    result = get_phase("2").workers_fn(state, profile)
+    result = get_phase("2.1").workers_fn(state, profile)
+    assert len(result) == 2
     output_names = {inv.output_path.name for inv in result}
-    assert output_names == {
-        "option-a.md", "option-b.md",
-        "option-a.skeptic.md", "option-b.skeptic.md",
-        "decision.md",
-    }
+    assert output_names == {"option-a.md", "option-b.md"}
 
 
-def test_explore_no_axis_renames_draft_to_decision(tmp_path: Path) -> None:
+def test_explore_critique_returns_two_invocations_per_domain(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {"alpha": "cost vs speed"})
+    (ws / "alpha").mkdir()
+    (ws / "alpha" / "draft-1.md").write_text("draft", encoding="utf-8")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    result = get_phase("2.2").workers_fn(state, profile)
+    assert len(result) == 2
+    output_names = {inv.output_path.name for inv in result}
+    assert output_names == {"option-a.skeptic.md", "option-b.skeptic.md"}
+    for inv in result:
+        assert inv.role_path.name == "branch-skeptic.md"
+
+
+def test_explore_prune_returns_one_invocation_per_domain(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {"alpha": "cost vs speed"})
+    (ws / "alpha").mkdir()
+    (ws / "alpha" / "draft-1.md").write_text("draft", encoding="utf-8")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    result = get_phase("2.3").workers_fn(state, profile)
+    assert len(result) == 1
+    inv = result[0]
+    assert inv.role_path.name == "pruner.md"
+    assert inv.output_path == ws / "alpha" / "decision.md"
+    assert ws / "alpha" / "option-a.md" in inv.allowed_read_paths
+    assert ws / "alpha" / "option-a.skeptic.md" in inv.allowed_read_paths
+    assert ws / "alpha" / "option-b.md" in inv.allowed_read_paths
+    assert ws / "alpha" / "option-b.skeptic.md" in inv.allowed_read_paths
+
+
+def test_explore_no_axis_returns_empty_for_all_three(tmp_path: Path) -> None:
     ws = tmp_path / "workspace"
     ws.mkdir()
     _write_disagreements(ws, {})
     (ws / "alpha").mkdir()
-    draft = ws / "alpha" / "draft-1.md"
-    draft.write_text("draft content", encoding="utf-8")
     profile = _make_profile_with_specialists(
         tmp_path / "profiles" / "app-idea", ["alpha"]
     )
     state = _make_state(ws)
-    result = get_phase("2").workers_fn(state, profile)
-    assert result == []
-    assert not draft.exists()
-    assert (ws / "alpha" / "decision.md").exists()
-
-
-def test_explore_no_disagreements_file_renames_draft(tmp_path: Path) -> None:
-    ws = tmp_path / "workspace"
-    ws.mkdir()
-    (ws / "alpha").mkdir()
-    draft = ws / "alpha" / "draft-1.md"
-    draft.write_text("draft content", encoding="utf-8")
-    profile = _make_profile_with_specialists(
-        tmp_path / "profiles" / "app-idea", ["alpha"]
-    )
-    state = _make_state(ws)
-    result = get_phase("2").workers_fn(state, profile)
-    assert result == []
-    assert not draft.exists()
-    assert (ws / "alpha" / "decision.md").exists()
+    for phase_id in ("2.1", "2.2", "2.3"):
+        assert get_phase(phase_id).workers_fn(state, profile) == []
 
 
 def test_explore_branch_axis_in_extra_context(tmp_path: Path) -> None:
@@ -418,11 +425,8 @@ def test_explore_branch_axis_in_extra_context(tmp_path: Path) -> None:
         tmp_path / "profiles" / "app-idea", ["alpha"]
     )
     state = _make_state(ws)
-    result = get_phase("2").workers_fn(state, profile)
-    alt_invocations = [
-        r for r in result if r.output_path.name in ("option-a.md", "option-b.md")
-    ]
-    for inv in alt_invocations:
+    result = get_phase("2.1").workers_fn(state, profile)
+    for inv in result:
         assert inv.extra_context["branch_axis"] == "cost vs speed"
 
 
@@ -613,7 +617,7 @@ def test_synthesize_verdict_free_choice_when_exactly_50pct_unconfirmed(
 
 
 def _explore_gate(tmp_path: Path) -> bool:
-    phase = get_phase("2")
+    phase = get_phase("2.1")
     assert phase.gate_fn is not None
     return phase.gate_fn(_make_state(tmp_path))
 
@@ -691,7 +695,7 @@ def test_get_phase_raises_key_error_for_unknown_id() -> None:
 def test_phase_index_returns_correct_index() -> None:
     assert phase_index("0") == 0
     assert phase_index("0.5") == 1
-    assert phase_index("4") == 8
+    assert phase_index("4") == 10
 
 
 def test_phase_index_raises_key_error_for_unknown_id() -> None:

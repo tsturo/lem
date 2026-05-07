@@ -41,7 +41,14 @@ def _fmt_elapsed(seconds: float) -> str:
 def _build_pipeline_text(current_phase: str, completed_phases: set[str]) -> str:
     parts: list[str] = []
     found_current = False
+    seen: set[str] = set()
+    # Dedupe by name so the user sees one pill per logical phase even when the
+    # pipeline has multiple sub-phases with the same display name (e.g. Explore
+    # 2.1 / 2.2 / 2.3).
     for spec in PHASES:
+        if spec.name in seen:
+            continue
+        seen.add(spec.name)
         if spec.name in completed_phases:
             parts.append(_phase_pill(spec.name, "done"))
         elif spec.name == current_phase and not found_current:

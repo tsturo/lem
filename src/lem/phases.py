@@ -88,41 +88,45 @@ def _reframe_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocat
     )]
 
 
-def _explore_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:
+def _read_axes_by_domain(state: RunState) -> dict[str, str]:
     disagreements = state.workspace_path / "disagreements.md"
-    axes_by_domain: dict[str, str] = {}
-    if disagreements.exists():
-        try:
-            doc = parse_file(disagreements)
-            raw = doc.frontmatter.get("axes_by_domain")
-            if isinstance(raw, dict):
-                raw_dict = cast("dict[object, object]", raw)
-                axes_by_domain = {
-                    str(k): str(v) for k, v in raw_dict.items()
-                    if isinstance(v, str) and v.strip()
-                }
-        except Exception:
-            pass
+    if not disagreements.exists():
+        return {}
+    try:
+        doc = parse_file(disagreements)
+    except Exception:
+        return {}
+    raw = doc.frontmatter.get("axes_by_domain")
+    if not isinstance(raw, dict):
+        return {}
+    raw_dict = cast("dict[object, object]", raw)
+    return {
+        str(k): str(v) for k, v in raw_dict.items()
+        if isinstance(v, str) and v.strip()
+    }
 
+
+def _branching_specialists(
+    state: RunState, profile: Profile
+) -> list[tuple[str, str]]:
+    """Return [(spec_name, axis)] for specialists with a non-empty axis."""
+    axes = _read_axes_by_domain(state)
+    return [
+        (s, axes[s])
+        for s in profile.specialists
+        if axes.get(s, "").strip()
+    ]
+
+
+def _explore_generate_workers_fn(
+    state: RunState, profile: Profile
+) -> list[WorkerInvocation]:
+    """Phase 2.1 — generators. One pair (option-a, option-b) per branching domain."""
     invocations: list[WorkerInvocation] = []
-    branch_skeptic_path = (
-        profile.source_dir.parent / "process_roles" / "branch-skeptic.md"
-    )
-    pruner_path = profile.source_dir.parent / "process_roles" / "pruner.md"
-
-    for spec_name in profile.specialists:
+    for spec_name, axis in _branching_specialists(state, profile):
         domain_dir = state.workspace_path / spec_name
         draft_path = domain_dir / "draft-1.md"
-        decision_path = domain_dir / "decision.md"
-        axis = axes_by_domain.get(spec_name, "")
-
-        if not axis:
-            if draft_path.exists() and not decision_path.exists():
-                draft_path.rename(decision_path)
-            continue
-
         spec_role = profile.source_dir / "roles" / f"{spec_name}.md"
-
         for k, label in enumerate(("a", "b"), start=1):
             invocations.append(WorkerInvocation(
                 role_path=spec_role,
@@ -139,7 +143,19 @@ def _explore_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocat
                 timeout_s=600,
                 extra_context={"branch_axis": axis, "alternative_index": str(k)},
             ))
+    return invocations
 
+
+def _explore_critique_workers_fn(
+    state: RunState, profile: Profile
+) -> list[WorkerInvocation]:
+    """Phase 2.2 — branch-skeptic per option. Reads option files written by 2.1."""
+    invocations: list[WorkerInvocation] = []
+    branch_skeptic_path = (
+        profile.source_dir.parent / "process_roles" / "branch-skeptic.md"
+    )
+    for spec_name, _axis in _branching_specialists(state, profile):
+        domain_dir = state.workspace_path / spec_name
         for label in ("a", "b"):
             invocations.append(WorkerInvocation(
                 role_path=branch_skeptic_path,
@@ -151,11 +167,21 @@ def _explore_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocat
                 timeout_s=300,
                 extra_context={"option_label": label},
             ))
+    return invocations
 
+
+def _explore_prune_workers_fn(
+    state: RunState, profile: Profile
+) -> list[WorkerInvocation]:
+    """Phase 2.3 — pruner per branching domain. Reads 4 files per domain."""
+    invocations: list[WorkerInvocation] = []
+    pruner_path = profile.source_dir.parent / "process_roles" / "pruner.md"
+    for spec_name, _axis in _branching_specialists(state, profile):
+        domain_dir = state.workspace_path / spec_name
         invocations.append(WorkerInvocation(
             role_path=pruner_path,
             workspace_path=state.workspace_path,
-            output_path=decision_path,
+            output_path=domain_dir / "decision.md",
             allowed_read_paths=[
                 domain_dir / "option-a.md",
                 domain_dir / "option-a.skeptic.md",
@@ -167,7 +193,6 @@ def _explore_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocat
             timeout_s=300,
             extra_context={"domain": spec_name},
         ))
-
     return invocations
 
 
@@ -290,9 +315,23 @@ PHASES: list[PhaseSpec] = [
     ),
     PhaseSpec(id="1.6", name="Reframe", workers_fn=_reframe_workers_fn, parallel=False),
     PhaseSpec(
-        id="2",
+        id="2.1",
         name="Explore",
-        workers_fn=_explore_workers_fn,
+        workers_fn=_explore_generate_workers_fn,
+        parallel=True,
+        gate_fn=_explore_gate_fn,
+    ),
+    PhaseSpec(
+        id="2.2",
+        name="Explore",
+        workers_fn=_explore_critique_workers_fn,
+        parallel=True,
+        gate_fn=_explore_gate_fn,
+    ),
+    PhaseSpec(
+        id="2.3",
+        name="Explore",
+        workers_fn=_explore_prune_workers_fn,
         parallel=True,
         gate_fn=_explore_gate_fn,
     ),
