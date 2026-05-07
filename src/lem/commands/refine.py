@@ -8,6 +8,7 @@ from typing import Annotated, Optional
 import typer
 
 from lem.daemon import daemonize
+from lem.install_agents import install_agents
 from lem.intake import run_intake
 from lem.orchestrator import OrchestratorConfig, run_orchestrator
 from lem.paths import make_run_id, resolve_workspace
@@ -51,6 +52,8 @@ def refine(
         _print_dry_run_estimate(profile_obj, depth)
         return
 
+    _maybe_install_agents(profile_obj.source_dir)
+
     run_intake(
         workspace_path=workspace_path,
         profile=profile_obj,
@@ -74,6 +77,16 @@ def refine(
             lambda: run_orchestrator(workspace_path, profile_obj, config),
         )
         typer.echo(actual_run_id)
+
+
+def _maybe_install_agents(profile_dir: Path) -> None:
+    target = Path(".claude/agents")
+    if target.is_dir() and any(target.iterdir()):
+        return
+    try:
+        install_agents(profile_dir, target)
+    except Exception:
+        pass
 
 
 def _print_dry_run_estimate(profile_obj: Profile, depth: str) -> None:
