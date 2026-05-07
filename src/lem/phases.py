@@ -170,7 +170,17 @@ def _explore_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocat
 
 
 def _distill_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:
-    return []
+    decisions = [state.workspace_path / s / "decision.md" for s in profile.specialists]
+    return [WorkerInvocation(
+        role_path=profile.source_dir.parent / "process_roles" / "distiller.md",
+        workspace_path=state.workspace_path,
+        output_path=state.workspace_path / "meta" / "distilled" / "post-explore.md",
+        allowed_read_paths=[d for d in decisions if d.exists()],
+        model="haiku",
+        max_output_tokens=8000,
+        timeout_s=300,
+        extra_context={},
+    )]
 
 
 def _critique_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:

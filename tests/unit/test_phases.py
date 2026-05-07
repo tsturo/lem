@@ -426,6 +426,51 @@ def test_explore_branch_axis_in_extra_context(tmp_path: Path) -> None:
         assert inv.extra_context["branch_axis"] == "cost vs speed"
 
 
+# ── Task 6.7: Distill workers_fn ─────────────────────────────────────────────
+
+
+def test_distill_returns_one_invocation(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(tmp_path / "workspace")
+    result = get_phase("2.5").workers_fn(state, profile)
+    assert len(result) == 1
+
+
+def test_distill_model_is_haiku(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("2.5").workers_fn(state, profile)[0]
+    assert inv.model == "haiku"
+
+
+def test_distill_output_path(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    inv = get_phase("2.5").workers_fn(state, profile)[0]
+    assert inv.output_path == ws / "meta" / "distilled" / "post-explore.md"
+
+
+def test_distill_only_existing_decisions_in_read_paths(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    (ws / "alpha").mkdir()
+    (ws / "alpha" / "decision.md").write_text("decision", encoding="utf-8")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha", "beta"]
+    )
+    state = _make_state(ws)
+    inv = get_phase("2.5").workers_fn(state, profile)[0]
+    assert ws / "alpha" / "decision.md" in inv.allowed_read_paths
+    assert ws / "beta" / "decision.md" not in inv.allowed_read_paths
+
+
 # ── explore gate_fn tests ─────────────────────────────────────────────────────
 
 
