@@ -49,7 +49,18 @@ def _discover_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvoca
 def _disagreement_workers_fn(
     state: RunState, profile: Profile
 ) -> list[WorkerInvocation]:
-    return []
+    drafts = [state.workspace_path / s / "draft-1.md" for s in profile.specialists]
+    detector = profile.source_dir.parent / "process_roles" / "disagreement-detector.md"
+    return [WorkerInvocation(
+        role_path=detector,
+        workspace_path=state.workspace_path,
+        output_path=state.workspace_path / "disagreements.md",
+        allowed_read_paths=drafts,
+        model="sonnet",
+        max_output_tokens=1500,
+        timeout_s=600,
+        extra_context={},
+    )]
 
 
 def _reframe_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:

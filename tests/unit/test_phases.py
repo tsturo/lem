@@ -229,6 +229,48 @@ def test_discover_reads_jtbd_and_idea(tmp_path: Path) -> None:
     assert ws / "assumptions.yaml" in inv.allowed_read_paths
 
 
+# ── Task 6.4: Disagreement workers_fn ────────────────────────────────────────
+
+
+def test_disagreement_returns_one_invocation(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha", "beta"]
+    )
+    state = _make_state(tmp_path / "workspace")
+    result = get_phase("1.5").workers_fn(state, profile)
+    assert len(result) == 1
+
+
+def test_disagreement_role_is_detector(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("1.5").workers_fn(state, profile)[0]
+    assert inv.role_path.name == "disagreement-detector.md"
+
+
+def test_disagreement_reads_all_draft1(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha", "beta"]
+    )
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    inv = get_phase("1.5").workers_fn(state, profile)[0]
+    assert ws / "alpha" / "draft-1.md" in inv.allowed_read_paths
+    assert ws / "beta" / "draft-1.md" in inv.allowed_read_paths
+
+
+def test_disagreement_output_path(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    inv = get_phase("1.5").workers_fn(state, profile)[0]
+    assert inv.output_path == ws / "disagreements.md"
+
+
 # ── explore gate_fn tests ─────────────────────────────────────────────────────
 
 
