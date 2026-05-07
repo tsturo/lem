@@ -1,6 +1,14 @@
 import typer
 
 import lem
+from lem.commands.cancel import cancel
+from lem.commands.list import list_runs
+from lem.commands.logs import logs
+from lem.commands.refine import refine
+from lem.commands.render import render
+from lem.commands.rerun import rerun
+from lem.commands.show import show
+from lem.commands.watch import watch
 
 app = typer.Typer()
 
@@ -22,3 +30,13 @@ def main(
     ),
 ) -> None:
     pass
+
+
+app.command()(refine)
+app.command()(watch)
+app.command(name="list")(list_runs)
+app.command()(show)
+app.command()(logs)
+app.command()(rerun)
+app.command()(cancel)
+app.command()(render)
