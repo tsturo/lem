@@ -59,6 +59,12 @@ def invoke(
     The orchestrator is responsible for pre-extracting system_prompt and
     allowed_tools from the role file before calling this function.
     """
+    if os.environ.get("LEM_STUB_MODE"):
+        stub_dir_env = os.environ.get("LEM_STUB_MODE_DIR")
+        return _stub_invoke(
+            inv, stub_dir=Path(stub_dir_env) if stub_dir_env else None
+        )
+
     user_prompt = _build_user_prompt(inv)
     cmd = _build_command(inv, system_prompt, allowed_tools)
 
@@ -189,6 +195,33 @@ def _parse_result(
         cost_usd=float(envelope.get("total_cost_usd", 0.0)),
         duration_s=float(envelope.get("duration_ms", 0)) / 1000.0,
         stop_reason=stop_reason,
+        schema_valid=False,
+        schema_errors=[],
+    )
+
+
+def _stub_invoke(inv: WorkerInvocation, stub_dir: Path | None) -> WorkerResult:
+    """Stub mode: read canned output by role name and write it to output_path."""
+    role_name = inv.role_path.stem
+    if stub_dir is None:
+        # Default: canned-outputs dir relative to the profile source dir is unknown
+        # here; fall back to a generic placeholder that passes any schema.
+        content = f"## Stub output\n\nStub content for role: {role_name}\n"
+    else:
+        canned = stub_dir / f"{role_name}.md"
+        if canned.exists():
+            content = canned.read_text(encoding="utf-8")
+        else:
+            content = f"## Stub output\n\nStub content for role: {role_name}\n"
+    _write_atomic(inv.output_path, content)
+    return WorkerResult(
+        exit_code=0,
+        output_path=inv.output_path,
+        tokens_in=100,
+        tokens_out=200,
+        cost_usd=0.01,
+        duration_s=0.05,
+        stop_reason="end_turn",
         schema_valid=False,
         schema_errors=[],
     )

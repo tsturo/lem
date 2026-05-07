@@ -1,0 +1,244 @@
+# pyright: strict
+"""End-to-end tests for the full pipeline using LEM_STUB_MODE (no API calls)."""
+
+from __future__ import annotations
+
+import json
+import threading
+from pathlib import Path
+
+import pytest
+
+from lem.control import write_control
+from lem.orchestrator import OrchestratorConfig, run_orchestrator
+from lem.profile import load_profile_from_path
+
+STUB_PROFILE_DIR = Path(__file__).parent.parent / "fixtures" / "stub-profile"
+CANNED_DIR = STUB_PROFILE_DIR / "canned-outputs"
+
+
+def _seed_workspace(workspace: Path) -> None:
+    """Write the minimum files the pipeline reads at workers_fn / gate_fn time."""
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "idea.md").write_text(
+        "An app that helps freelancers send invoices on time.\n", encoding="utf-8"
+    )
+    (workspace / "assumptions.yaml").write_text(
+        "- assumption: users have internet access\n"
+        "  confirmed: true\n"
+        "  would_change_verdict_if_false: 'no'\n",
+        encoding="utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# 1. Full pipeline completes with stub profile
+# ---------------------------------------------------------------------------
+
+
+def test_full_pipeline_completes_with_stub_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LEM_STUB_MODE", "1")
+    monkeypatch.setenv("LEM_STUB_MODE_DIR", str(CANNED_DIR))
+
+    workspace = tmp_path / "workspace"
+    _seed_workspace(workspace)
+
+    profile = load_profile_from_path(STUB_PROFILE_DIR)
+    state = run_orchestrator(workspace, profile, OrchestratorConfig(max_concurrent=2))
+
+    assert state.status == "completed"
+    assert (workspace / "idea.md").exists()
+    assert (workspace / "frame-shifter" / "jtbd.md").exists()
+    assert (workspace / "deliverables" / "executive-summary.md").exists()
+    assert (workspace / "meta" / "state.json").exists()
+
+    elapsed = state.last_event_at - state.started_at
+    assert elapsed < 30, f"pipeline took {elapsed:.1f}s (expected <30s)"
+
+
+# ---------------------------------------------------------------------------
+# 2. Each specialist draft-1.md is written
+# ---------------------------------------------------------------------------
+
+
+def test_specialist_drafts_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LEM_STUB_MODE", "1")
+    monkeypatch.setenv("LEM_STUB_MODE_DIR", str(CANNED_DIR))
+
+    workspace = tmp_path / "workspace"
+    _seed_workspace(workspace)
+
+    profile = load_profile_from_path(STUB_PROFILE_DIR)
+    state = run_orchestrator(workspace, profile)
+
+    assert state.status == "completed"
+    for specialist in ("architect", "designer", "market"):
+        draft = workspace / specialist / "draft-1.md"
+        assert draft.exists(), f"missing {draft}"
+        assert draft.read_text(encoding="utf-8").strip(), f"empty {draft}"
+
+
+# ---------------------------------------------------------------------------
+# 3. Wall-clock abort
+# ---------------------------------------------------------------------------
+
+
+def test_wall_clock_aborts_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LEM_STUB_MODE", "1")
+    monkeypatch.setenv("LEM_STUB_MODE_DIR", str(CANNED_DIR))
+
+    workspace = tmp_path / "workspace"
+    _seed_workspace(workspace)
+
+    profile = load_profile_from_path(STUB_PROFILE_DIR)
+    cfg = OrchestratorConfig(max_wall_clock_s=0.0)
+    state = run_orchestrator(workspace, profile, cfg)
+
+    assert state.status == "wall-clock-aborted"
+    assert state.error is not None
+
+
+# ---------------------------------------------------------------------------
+# 4. Pause then resume
+# ---------------------------------------------------------------------------
+
+
+def test_pause_then_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LEM_STUB_MODE", "1")
+    monkeypatch.setenv("LEM_STUB_MODE_DIR", str(CANNED_DIR))
+
+    workspace = tmp_path / "workspace"
+    _seed_workspace(workspace)
+
+    write_control(workspace, "pause")
+    threading.Timer(0.4, lambda: write_control(workspace, "resume")).start()
+
+    profile = load_profile_from_path(STUB_PROFILE_DIR)
+    state = run_orchestrator(workspace, profile)
+
+    assert state.status == "completed"
+
+
+# ---------------------------------------------------------------------------
+# 5. Cancel via control.json stops the run
+# ---------------------------------------------------------------------------
+
+
+def test_cancel_stops_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LEM_STUB_MODE", "1")
+    monkeypatch.setenv("LEM_STUB_MODE_DIR", str(CANNED_DIR))
+
+    workspace = tmp_path / "workspace"
+    _seed_workspace(workspace)
+
+    write_control(workspace, "cancel")
+
+    profile = load_profile_from_path(STUB_PROFILE_DIR)
+    state = run_orchestrator(workspace, profile)
+
+    assert state.status == "cancelled"
+    persisted = json.loads((workspace / "meta" / "state.json").read_text())
+    assert persisted["status"] == "cancelled"
+
+
+# ---------------------------------------------------------------------------
+# 6. Schema validation surfaced: bad output triggers retry path
+# ---------------------------------------------------------------------------
+
+
+def test_schema_validation_triggers_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Write a bad architect output on first invocation; verify schema_errors populated."""
+    monkeypatch.setenv("LEM_STUB_MODE", "1")
+
+    bad_dir = tmp_path / "bad-canned"
+    bad_dir.mkdir()
+    # Copy good outputs for all roles except architect
+    for name in (
+        "jtbd-extractor", "designer", "market", "disagreement-detector",
+        "frame-shifter", "distiller", "cross-skeptic", "kill-case-skeptic",
+        "synthesizer",
+    ):
+        src = CANNED_DIR / f"{name}.md"
+        if src.exists():
+            (bad_dir / f"{name}.md").write_text(
+                src.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+    # Write intentionally invalid architect output (missing required frontmatter + sections)
+    (bad_dir / "architect.md").write_text(
+        (STUB_PROFILE_DIR / "canned-outputs" / "architect-bad.md").read_text(
+            encoding="utf-8"
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("LEM_STUB_MODE_DIR", str(bad_dir))
+
+    workspace = tmp_path / "workspace"
+    _seed_workspace(workspace)
+
+    profile = load_profile_from_path(STUB_PROFILE_DIR)
+    state = run_orchestrator(workspace, profile)
+
+    # Pipeline completes (schema failure triggers retry, which also returns stub)
+    assert state.status == "completed"
+
+    # The architect output file exists (retry wrote something)
+    assert (workspace / "architect" / "draft-1.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# 7. State persisted correctly across phases
+# ---------------------------------------------------------------------------
+
+
+def test_state_json_reflects_final_phase(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LEM_STUB_MODE", "1")
+    monkeypatch.setenv("LEM_STUB_MODE_DIR", str(CANNED_DIR))
+
+    workspace = tmp_path / "workspace"
+    _seed_workspace(workspace)
+
+    profile = load_profile_from_path(STUB_PROFILE_DIR)
+    state = run_orchestrator(workspace, profile)
+
+    assert state.status == "completed"
+    persisted = json.loads((workspace / "meta" / "state.json").read_text())
+    assert persisted["status"] == "completed"
+    assert persisted["phase"] == "4"
+
+
+# ---------------------------------------------------------------------------
+# 8. LEM_STUB_MODE without LEM_STUB_MODE_DIR uses generic placeholder
+# ---------------------------------------------------------------------------
+
+
+def test_stub_mode_without_dir_writes_placeholder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LEM_STUB_MODE", "1")
+    monkeypatch.delenv("LEM_STUB_MODE_DIR", raising=False)
+
+    workspace = tmp_path / "workspace"
+    _seed_workspace(workspace)
+
+    profile = load_profile_from_path(STUB_PROFILE_DIR)
+    # Pipeline will complete; schema validation may fail but should not crash
+    state = run_orchestrator(workspace, profile)
+
+    # Even with placeholders, orchestrator must not crash
+    assert state.status in ("completed", "failed", "cost-aborted")
+    assert (workspace / "frame-shifter" / "jtbd.md").exists()

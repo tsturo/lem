@@ -38,6 +38,39 @@ def _load_role(path: Path) -> Role:
     )
 
 
+def load_profile_from_path(profile_dir: Path) -> Profile:
+    """Load a profile from an explicit directory path (used for stub/test profiles)."""
+    raw = yaml.safe_load((profile_dir / "profile.yaml").read_text(encoding="utf-8"))
+    intake_prompt = (profile_dir / "intake-prompt.md").read_text(encoding="utf-8")
+
+    roles: dict[str, Role] = {}
+    roles_dir = profile_dir / "roles"
+    if roles_dir.is_dir():
+        for role_file in sorted(roles_dir.glob("*.md")):
+            role = _load_role(role_file)
+            roles[role.name] = role
+
+    process_roles: dict[str, Role] = {}
+    proc_dir = _process_roles_root()
+    if proc_dir.is_dir():
+        for role_file in sorted(proc_dir.glob("*.md")):
+            role = _load_role(role_file)
+            process_roles[role.name] = role
+
+    return Profile(
+        name=str(raw["name"]),
+        description=str(raw.get("description", "")),
+        specialists=cast(Any, raw.get("specialists", [])),
+        verdict_options=cast(Any, raw.get("verdict_options", [])),
+        default_deliverables=cast(Any, raw.get("default_deliverables", [])),
+        flag_gated_deliverables=cast(Any, raw.get("flag_gated_deliverables", {})),
+        roles=roles,
+        process_roles=process_roles,
+        intake_prompt=intake_prompt,
+        source_dir=profile_dir,
+    )
+
+
 def load_profile(name: str = "app-idea") -> Profile:
     profile_dir = _profiles_root() / name
     raw = yaml.safe_load((profile_dir / "profile.yaml").read_text(encoding="utf-8"))
