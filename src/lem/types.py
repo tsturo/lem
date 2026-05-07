@@ -85,6 +85,10 @@ class PhaseSpec:
     workers_fn: Callable[[RunState, Profile], list[WorkerInvocation]]
     parallel: bool
     gate_fn: Callable[[RunState], bool] | None = None
+    # Optional pre-phase hook. Runs unconditionally BEFORE gate_fn — used for
+    # cleanup / file renames / state preparation that must happen even when
+    # the phase itself is skipped. Side-effecting; returns None.
+    setup_fn: Callable[[RunState, Profile], None] | None = None
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)

@@ -75,6 +75,9 @@ def run_orchestrator(
                 state.error = "max wall-clock exceeded"
                 break
 
+            if phase.setup_fn is not None:
+                phase.setup_fn(state, profile)
+
             if phase.gate_fn and not phase.gate_fn(state):
                 state.phase = phase.id
                 _log(workspace_path, "phase_skipped", phase=phase.id)

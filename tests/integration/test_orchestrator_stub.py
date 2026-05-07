@@ -672,3 +672,44 @@ def test_generous_cost_ceiling_completes(
     state = run_orchestrator(tmp_path, stub_profile, config=cfg)
 
     assert state.status == "completed"
+
+
+# ---------------------------------------------------------------------------
+# 15. setup_fn runs unconditionally before gate_fn
+# ---------------------------------------------------------------------------
+
+
+def test_setup_fn_runs_before_gate_fn_skips(
+    tmp_path: Path, stub_profile: Profile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "lem.orchestrator.dispatch_worker",
+        lambda i, sp, t, output_schema=None: _ok_result(i),
+    )
+
+    setup_calls: list[str] = []
+
+    def setup(s: RunState, p: Profile) -> None:
+        setup_calls.append("called")
+
+    _patch_all_phases_empty(monkeypatch)
+    _patch_phase_workers(
+        monkeypatch,
+        "0",
+        lambda s, p: [],
+        gate_fn=lambda s: False,
+    )
+    # Patch the first phase to also have a setup_fn.
+    import dataclasses as _dc
+    import lem.orchestrator as _orch
+    patched = []
+    for ph in _orch.PHASES:
+        if ph.id == "0":
+            patched.append(_dc.replace(ph, setup_fn=setup))
+        else:
+            patched.append(ph)
+    monkeypatch.setattr("lem.orchestrator.PHASES", patched)
+
+    state = run_orchestrator(tmp_path, stub_profile)
+    assert state.status == "completed"
+    assert setup_calls == ["called"]

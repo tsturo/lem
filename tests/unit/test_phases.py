@@ -435,6 +435,100 @@ def test_explore_no_axis_returns_empty_for_all_three(tmp_path: Path) -> None:
         assert get_phase(phase_id).workers_fn(state, profile) == []
 
 
+# ── Explore prepare hook tests ────────────────────────────────────────────────
+
+
+def test_explore_prepare_renames_draft_for_non_branching(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {})
+    (ws / "alpha").mkdir()
+    draft = ws / "alpha" / "draft-1.md"
+    draft.write_text("draft content", encoding="utf-8")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    setup_fn = get_phase("2.1").setup_fn
+    assert setup_fn is not None
+    setup_fn(state, profile)
+    assert not draft.exists()
+    decision = ws / "alpha" / "decision.md"
+    assert decision.exists()
+    assert decision.read_text(encoding="utf-8") == "draft content"
+
+
+def test_explore_prepare_no_disagreements_file_renames_draft(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    (ws / "alpha").mkdir()
+    draft = ws / "alpha" / "draft-1.md"
+    draft.write_text("draft content", encoding="utf-8")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    setup_fn = get_phase("2.1").setup_fn
+    assert setup_fn is not None
+    setup_fn(state, profile)
+    assert not draft.exists()
+    assert (ws / "alpha" / "decision.md").exists()
+
+
+def test_explore_prepare_skips_branching_domain(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {"alpha": "cost vs speed"})
+    (ws / "alpha").mkdir()
+    draft = ws / "alpha" / "draft-1.md"
+    draft.write_text("draft content", encoding="utf-8")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    setup_fn = get_phase("2.1").setup_fn
+    assert setup_fn is not None
+    setup_fn(state, profile)
+    # Branching: draft is preserved; pruner will write decision.md later.
+    assert draft.exists()
+    assert not (ws / "alpha" / "decision.md").exists()
+
+
+def test_explore_prepare_idempotent_when_decision_exists(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {})
+    (ws / "alpha").mkdir()
+    draft = ws / "alpha" / "draft-1.md"
+    draft.write_text("draft", encoding="utf-8")
+    decision = ws / "alpha" / "decision.md"
+    decision.write_text("pre-existing decision", encoding="utf-8")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    setup_fn = get_phase("2.1").setup_fn
+    assert setup_fn is not None
+    setup_fn(state, profile)
+    # Pre-existing decision is preserved; draft remains untouched.
+    assert decision.read_text(encoding="utf-8") == "pre-existing decision"
+    assert draft.exists()
+
+
+def test_explore_prepare_handles_missing_draft(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {})
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    setup_fn = get_phase("2.1").setup_fn
+    assert setup_fn is not None
+    # Must not raise when neither draft nor decision exists for the domain.
+    setup_fn(state, profile)
+
+
 def test_explore_branch_axis_in_extra_context(tmp_path: Path) -> None:
     ws = tmp_path / "workspace"
     ws.mkdir()

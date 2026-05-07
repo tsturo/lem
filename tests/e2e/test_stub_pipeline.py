@@ -76,10 +76,12 @@ def test_specialist_drafts_written(
     state = run_orchestrator(workspace, profile)
 
     assert state.status == "completed"
+    # Non-branching specialists have draft-1.md renamed to decision.md by the
+    # explore-prepare hook so downstream phases find a single decision file.
     for specialist in ("architect", "designer", "market"):
-        draft = workspace / specialist / "draft-1.md"
-        assert draft.exists(), f"missing {draft}"
-        assert draft.read_text(encoding="utf-8").strip(), f"empty {draft}"
+        decision = workspace / specialist / "decision.md"
+        assert decision.exists(), f"missing {decision}"
+        assert decision.read_text(encoding="utf-8").strip(), f"empty {decision}"
 
 
 # ---------------------------------------------------------------------------
@@ -194,8 +196,9 @@ def test_schema_validation_triggers_retry(
     # Pipeline completes (schema failure triggers retry, which also returns stub)
     assert state.status == "completed"
 
-    # The architect output file exists (retry wrote something)
-    assert (workspace / "architect" / "draft-1.md").exists()
+    # The architect output file exists (retry wrote something).
+    # Post-explore-prepare: non-branching draft-1.md is renamed to decision.md.
+    assert (workspace / "architect" / "decision.md").exists()
 
 
 # ---------------------------------------------------------------------------

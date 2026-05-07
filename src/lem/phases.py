@@ -117,6 +117,30 @@ def _branching_specialists(
     ]
 
 
+def _explore_prepare(state: RunState, profile: Profile) -> None:
+    """Pre-Phase-2 hook: rename draft-1.md → decision.md for non-branching domains.
+
+    Runs unconditionally before the gate_fn check, so even when the gate
+    skips the explore sub-phases the downstream phases (Distill, Critique,
+    Synthesize) find a decision.md per specialist.
+
+    Branching domains keep draft-1.md untouched: phase 2.3 will write
+    decision.md from the pruner's output.
+    """
+    axes = _read_axes_by_domain(state)
+    for spec_name in profile.specialists:
+        domain_dir = state.workspace_path / spec_name
+        decision_path = domain_dir / "decision.md"
+        draft_path = domain_dir / "draft-1.md"
+        is_branching = bool(axes.get(spec_name, "").strip())
+        if is_branching:
+            continue
+        if decision_path.exists():
+            continue
+        if draft_path.exists():
+            draft_path.rename(decision_path)
+
+
 def _explore_generate_workers_fn(
     state: RunState, profile: Profile
 ) -> list[WorkerInvocation]:
@@ -319,6 +343,7 @@ PHASES: list[PhaseSpec] = [
         workers_fn=_explore_generate_workers_fn,
         parallel=True,
         gate_fn=_explore_gate_fn,
+        setup_fn=_explore_prepare,
     ),
     PhaseSpec(
         id="2.2",
