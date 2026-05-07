@@ -181,6 +181,54 @@ def test_jtbd_model_is_sonnet(tmp_path: Path) -> None:
     assert inv.model == "sonnet"
 
 
+# ── Task 6.3: Discover workers_fn ────────────────────────────────────────────
+
+
+def test_discover_one_invocation_per_specialist(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha", "beta"]
+    )
+    state = _make_state(tmp_path / "workspace")
+    result = get_phase("1").workers_fn(state, profile)
+    assert len(result) == 2
+
+
+def test_discover_zero_specialists_returns_empty(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(tmp_path / "profiles" / "app-idea", [])
+    state = _make_state(tmp_path / "workspace")
+    assert get_phase("1").workers_fn(state, profile) == []
+
+
+def test_discover_role_path_per_specialist(tmp_path: Path) -> None:
+    source_dir = tmp_path / "profiles" / "app-idea"
+    profile = _make_profile_with_specialists(source_dir, ["alpha"])
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("1").workers_fn(state, profile)[0]
+    assert inv.role_path == source_dir / "roles" / "alpha.md"
+
+
+def test_discover_output_path_per_specialist(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    inv = get_phase("1").workers_fn(state, profile)[0]
+    assert inv.output_path == ws / "alpha" / "draft-1.md"
+
+
+def test_discover_reads_jtbd_and_idea(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    inv = get_phase("1").workers_fn(state, profile)[0]
+    assert ws / "idea.md" in inv.allowed_read_paths
+    assert ws / "frame-shifter" / "jtbd.md" in inv.allowed_read_paths
+    assert ws / "assumptions.yaml" in inv.allowed_read_paths
+
+
 # ── explore gate_fn tests ─────────────────────────────────────────────────────
 
 

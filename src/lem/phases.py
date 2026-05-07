@@ -26,7 +26,24 @@ def _jtbd_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation
 
 
 def _discover_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:
-    return []
+    invocations: list[WorkerInvocation] = []
+    for spec_name in profile.specialists:
+        role_path = profile.source_dir / "roles" / f"{spec_name}.md"
+        invocations.append(WorkerInvocation(
+            role_path=role_path,
+            workspace_path=state.workspace_path,
+            output_path=state.workspace_path / spec_name / "draft-1.md",
+            allowed_read_paths=[
+                state.workspace_path / "idea.md",
+                state.workspace_path / "assumptions.yaml",
+                state.workspace_path / "frame-shifter" / "jtbd.md",
+            ],
+            model="sonnet",
+            max_output_tokens=2000,
+            timeout_s=600,
+            extra_context={},
+        ))
+    return invocations
 
 
 def _disagreement_workers_fn(
