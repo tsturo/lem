@@ -87,7 +87,86 @@ def _reframe_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocat
 
 
 def _explore_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:
-    return []
+    disagreements = state.workspace_path / "disagreements.md"
+    axes_by_domain: dict[str, str] = {}
+    if disagreements.exists():
+        try:
+            doc = parse_file(disagreements)
+            raw = doc.frontmatter.get("axes_by_domain")
+            if isinstance(raw, dict):
+                raw_dict = cast("dict[object, object]", raw)
+                axes_by_domain = {
+                    str(k): str(v) for k, v in raw_dict.items()
+                    if isinstance(v, str) and v.strip()
+                }
+        except Exception:
+            pass
+
+    invocations: list[WorkerInvocation] = []
+    branch_skeptic_path = (
+        profile.source_dir.parent / "process_roles" / "branch-skeptic.md"
+    )
+    pruner_path = profile.source_dir.parent / "process_roles" / "pruner.md"
+
+    for spec_name in profile.specialists:
+        domain_dir = state.workspace_path / spec_name
+        draft_path = domain_dir / "draft-1.md"
+        decision_path = domain_dir / "decision.md"
+        axis = axes_by_domain.get(spec_name, "")
+
+        if not axis:
+            if draft_path.exists() and not decision_path.exists():
+                draft_path.rename(decision_path)
+            continue
+
+        spec_role = profile.source_dir / "roles" / f"{spec_name}.md"
+
+        for k, label in enumerate(("a", "b"), start=1):
+            invocations.append(WorkerInvocation(
+                role_path=spec_role,
+                workspace_path=state.workspace_path,
+                output_path=domain_dir / f"option-{label}.md",
+                allowed_read_paths=[
+                    state.workspace_path / "idea.md",
+                    state.workspace_path / "assumptions.yaml",
+                    state.workspace_path / "frame-shifter" / "draft-1.md",
+                    draft_path,
+                ],
+                model="sonnet",
+                max_output_tokens=2000,
+                timeout_s=600,
+                extra_context={"branch_axis": axis, "alternative_index": str(k)},
+            ))
+
+        for label in ("a", "b"):
+            invocations.append(WorkerInvocation(
+                role_path=branch_skeptic_path,
+                workspace_path=state.workspace_path,
+                output_path=domain_dir / f"option-{label}.skeptic.md",
+                allowed_read_paths=[domain_dir / f"option-{label}.md"],
+                model="sonnet",
+                max_output_tokens=1000,
+                timeout_s=300,
+                extra_context={"option_label": label},
+            ))
+
+        invocations.append(WorkerInvocation(
+            role_path=pruner_path,
+            workspace_path=state.workspace_path,
+            output_path=decision_path,
+            allowed_read_paths=[
+                domain_dir / "option-a.md",
+                domain_dir / "option-a.skeptic.md",
+                domain_dir / "option-b.md",
+                domain_dir / "option-b.skeptic.md",
+            ],
+            model="sonnet",
+            max_output_tokens=2000,
+            timeout_s=300,
+            extra_context={"domain": spec_name},
+        ))
+
+    return invocations
 
 
 def _distill_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:

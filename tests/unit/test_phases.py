@@ -331,6 +331,101 @@ def test_reframe_reads_fragment_when_exists(tmp_path: Path) -> None:
     assert inv.extra_context["prompt_fragment"] == "custom fragment"
 
 
+# ── Task 6.6: Explore workers_fn ─────────────────────────────────────────────
+
+
+def _write_disagreements(ws: Path, axes: dict[str, str]) -> None:
+    lines = ["---", "axes_by_domain:"]
+    for k, v in axes.items():
+        lines.append(f'  {k}: "{v}"')
+    lines += ["---", ""]
+    (ws / "disagreements.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def test_explore_branching_domain_returns_five_invocations(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {"alpha": "cost vs speed"})
+    (ws / "alpha").mkdir()
+    (ws / "alpha" / "draft-1.md").write_text("draft", encoding="utf-8")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    result = get_phase("2").workers_fn(state, profile)
+    assert len(result) == 5
+
+
+def test_explore_branching_output_paths(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {"alpha": "cost vs speed"})
+    (ws / "alpha").mkdir()
+    (ws / "alpha" / "draft-1.md").write_text("draft", encoding="utf-8")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    result = get_phase("2").workers_fn(state, profile)
+    output_names = {inv.output_path.name for inv in result}
+    assert output_names == {
+        "option-a.md", "option-b.md",
+        "option-a.skeptic.md", "option-b.skeptic.md",
+        "decision.md",
+    }
+
+
+def test_explore_no_axis_renames_draft_to_decision(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {})
+    (ws / "alpha").mkdir()
+    draft = ws / "alpha" / "draft-1.md"
+    draft.write_text("draft content", encoding="utf-8")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    result = get_phase("2").workers_fn(state, profile)
+    assert result == []
+    assert not draft.exists()
+    assert (ws / "alpha" / "decision.md").exists()
+
+
+def test_explore_no_disagreements_file_renames_draft(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    (ws / "alpha").mkdir()
+    draft = ws / "alpha" / "draft-1.md"
+    draft.write_text("draft content", encoding="utf-8")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    result = get_phase("2").workers_fn(state, profile)
+    assert result == []
+    assert not draft.exists()
+    assert (ws / "alpha" / "decision.md").exists()
+
+
+def test_explore_branch_axis_in_extra_context(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {"alpha": "cost vs speed"})
+    (ws / "alpha").mkdir()
+    (ws / "alpha" / "draft-1.md").write_text("draft", encoding="utf-8")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    result = get_phase("2").workers_fn(state, profile)
+    alt_invocations = [
+        r for r in result if r.output_path.name in ("option-a.md", "option-b.md")
+    ]
+    for inv in alt_invocations:
+        assert inv.extra_context["branch_axis"] == "cost vs speed"
+
+
 # ── explore gate_fn tests ─────────────────────────────────────────────────────
 
 
