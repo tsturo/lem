@@ -589,6 +589,18 @@ def test_distill_only_existing_decisions_in_read_paths(tmp_path: Path) -> None:
     assert ws / "beta" / "decision.md" not in inv.allowed_read_paths
 
 
+def test_distill_includes_core_inputs(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    inv = get_phase("2.5").workers_fn(state, profile)[0]
+    assert ws / "idea.md" in inv.allowed_read_paths
+    assert ws / "assumptions.yaml" in inv.allowed_read_paths
+    assert ws / "frame-shifter" / "draft-1.md" in inv.allowed_read_paths
+
+
 # ── Task 6.8: Critique workers_fn ────────────────────────────────────────────
 
 

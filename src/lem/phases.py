@@ -221,11 +221,16 @@ def _explore_prune_workers_fn(
 
 def _distill_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:
     decisions = [state.workspace_path / s / "decision.md" for s in profile.specialists]
+    core_inputs = [
+        state.workspace_path / "idea.md",
+        state.workspace_path / "assumptions.yaml",
+        state.workspace_path / "frame-shifter" / "draft-1.md",
+    ]
     return [WorkerInvocation(
         role_path=profile.source_dir.parent / "process_roles" / "distiller.md",
         workspace_path=state.workspace_path,
         output_path=state.workspace_path / "meta" / "distilled" / "post-explore.md",
-        allowed_read_paths=[d for d in decisions if d.exists()],
+        allowed_read_paths=[*core_inputs, *(d for d in decisions if d.exists())],
         model="haiku",
         max_output_tokens=8000,
         timeout_s=300,
