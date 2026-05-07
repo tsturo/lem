@@ -516,3 +516,159 @@ def test_state_updated_after_phase(
 
     assert persisted.phase == "4"
     assert persisted.status == "completed"
+
+
+# ---------------------------------------------------------------------------
+# 13. Jinja2 rendering: extra_context substituted into system_prompt
+# ---------------------------------------------------------------------------
+
+
+def _make_role_with_prompt(name: str, system_prompt: str) -> Role:
+    return Role(
+        name=name,
+        description="stub",
+        model="haiku",
+        worker="cli",
+        phase=None,
+        output_cap=1024,
+        timeout_s=30,
+        branchable="no",
+        output_schema={},
+        tools=[],
+        system_prompt=system_prompt,
+        source_path=Path("/stub"),
+    )
+
+
+def test_extra_context_substituted_into_system_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """dispatch_worker must receive the rendered prompt, not the raw template."""
+    captured: list[str] = []
+
+    def fake_dispatch(
+        inv: WorkerInvocation, sp: str, tools: list[str], *, output_schema: Any = None
+    ) -> WorkerResult:
+        captured.append(sp)
+        return _ok_result(inv)
+
+    role = _make_role_with_prompt("tmpl-role", "Hello {{prompt_fragment}} world")
+    profile = Profile(
+        name="stub",
+        description="",
+        specialists=[],
+        verdict_options=[],
+        default_deliverables=[],
+        flag_gated_deliverables={},
+        roles={"tmpl-role": role},
+        process_roles={name: _make_role(name) for name in _PROCESS_ROLE_NAMES},
+        intake_prompt="",
+        source_dir=Path("/stub"),
+    )
+
+    inv = WorkerInvocation(
+        role_path=tmp_path / "tmpl-role.md",
+        workspace_path=tmp_path,
+        output_path=tmp_path / "out.json",
+        allowed_read_paths=[],
+        model="haiku",
+        max_output_tokens=1024,
+        timeout_s=30,
+        extra_context={"prompt_fragment": "FRAGMENT_TEXT"},
+    )
+
+    _patch_all_phases_empty(monkeypatch)
+    _patch_phase_workers(monkeypatch, "0", lambda s, p: [inv])
+    monkeypatch.setattr("lem.orchestrator.dispatch_worker", fake_dispatch)
+
+    state = run_orchestrator(tmp_path, profile)
+    assert state.status == "completed"
+    assert len(captured) == 1
+    assert "FRAGMENT_TEXT" in captured[0]
+    assert "{{prompt_fragment}}" not in captured[0]
+
+
+def test_undefined_extra_context_var_renders_as_empty_string(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Missing extra_context keys must not raise — they render as empty string."""
+    captured: list[str] = []
+
+    def fake_dispatch(
+        inv: WorkerInvocation, sp: str, tools: list[str], *, output_schema: Any = None
+    ) -> WorkerResult:
+        captured.append(sp)
+        return _ok_result(inv)
+
+    role = _make_role_with_prompt("tmpl-role", "Before {{undefined_var}} after")
+    profile = Profile(
+        name="stub",
+        description="",
+        specialists=[],
+        verdict_options=[],
+        default_deliverables=[],
+        flag_gated_deliverables={},
+        roles={"tmpl-role": role},
+        process_roles={name: _make_role(name) for name in _PROCESS_ROLE_NAMES},
+        intake_prompt="",
+        source_dir=Path("/stub"),
+    )
+
+    inv = WorkerInvocation(
+        role_path=tmp_path / "tmpl-role.md",
+        workspace_path=tmp_path,
+        output_path=tmp_path / "out.json",
+        allowed_read_paths=[],
+        model="haiku",
+        max_output_tokens=1024,
+        timeout_s=30,
+        extra_context={},
+    )
+
+    _patch_all_phases_empty(monkeypatch)
+    _patch_phase_workers(monkeypatch, "0", lambda s, p: [inv])
+    monkeypatch.setattr("lem.orchestrator.dispatch_worker", fake_dispatch)
+
+    state = run_orchestrator(tmp_path, profile)
+    assert state.status == "completed"
+    assert len(captured) == 1
+    assert captured[0] == "Before  after"
+    assert "{{undefined_var}}" not in captured[0]
+
+
+# ---------------------------------------------------------------------------
+# 14. Cost-ceiling: low max_cost aborts run
+# ---------------------------------------------------------------------------
+
+
+def test_cost_ceiling_aborts_run(
+    tmp_path: Path, stub_profile: Profile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inv = _make_invocation(tmp_path)
+    _patch_all_phases_empty(monkeypatch)
+    _patch_phase_workers(monkeypatch, "0", lambda s, p: [inv])
+    monkeypatch.setattr(
+        "lem.orchestrator.dispatch_worker",
+        lambda i, sp, t, output_schema=None: _ok_result(i),
+    )
+
+    cfg = OrchestratorConfig(max_cost=0.0001)
+    state = run_orchestrator(tmp_path, stub_profile, config=cfg)
+
+    assert state.status == "cost-aborted"
+    assert state.error is not None
+    assert "cost ceiling breach" in state.error
+
+
+def test_generous_cost_ceiling_completes(
+    tmp_path: Path, stub_profile: Profile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "lem.orchestrator.dispatch_worker",
+        lambda i, sp, t, output_schema=None: _ok_result(i),
+    )
+
+    cfg = OrchestratorConfig(max_cost=1000.0)
+    state = run_orchestrator(tmp_path, stub_profile, config=cfg)
+
+    assert state.status == "completed"

@@ -9,13 +9,20 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+import jinja2
+
 from lem.control import ControlAction, clear_control, read_control
 from lem.failure import breaker
-from lem.failure.ceiling import check_wall_clock
+from lem.failure.ceiling import (
+    check_cost_ceiling,
+    check_wall_clock,
+    project_worker_cost,
+)
 from lem.hooks import fire_on_complete, fire_on_error, load_hook_config, post_webhook
 from lem.notify import notify
 from lem.phases import PHASES
 from lem.state.cost import aggregate_phase, run_total
+from lem.state.events import write_event
 from lem.state.log import append_log
 from lem.state.run_state import write_state
 from lem.types import (
@@ -78,7 +85,27 @@ def run_orchestrator(
                 state.phase = phase.id
                 continue
 
-            results = _dispatch_phase(invocations, profile, phase, cfg)
+            projected_phase_cost = sum(
+                project_worker_cost(
+                    model=inv.model,
+                    input_estimate=_estimate_input_tokens(inv),
+                    output_cap=inv.max_output_tokens,
+                )
+                for inv in invocations
+            )
+            cost_verdict = check_cost_ceiling(
+                state, projected_phase_cost, max_cost=cfg.max_cost
+            )
+            if cost_verdict.breach:
+                state.status = "cost-aborted"
+                state.error = (
+                    f"cost ceiling breach: current={cost_verdict.current_spend:.4f} + "
+                    f"projected={cost_verdict.projected_worker_cost:.4f} > "
+                    f"max={cost_verdict.max_cost:.2f}"
+                )
+                break
+
+            results = _dispatch_phase(invocations, profile, phase, cfg, workspace_path)
 
             aggregate_phase(workspace_path, phase.id, state.run_id)
 
@@ -145,21 +172,55 @@ def _wait_for_resume(workspace_path: Path) -> ControlAction:
         time.sleep(1)
 
 
+def _estimate_input_tokens(inv: WorkerInvocation) -> int:
+    total_chars = 0
+    for p in inv.allowed_read_paths:
+        try:
+            total_chars += p.stat().st_size
+        except OSError:
+            pass
+    return total_chars // 4
+
+
+def _record_event(
+    workspace_path: Path, phase_id: str, inv: WorkerInvocation, result: WorkerResult
+) -> None:
+    write_event(
+        workspace_path,
+        phase=phase_id,
+        role=inv.role_path.stem,
+        payload={
+            "role": inv.role_path.stem,
+            "model": inv.model,
+            "tokens_in": result.tokens_in,
+            "tokens_out": result.tokens_out,
+            "duration_s": result.duration_s,
+            "attempt": 1,
+            "timestamp": time.time(),
+        },
+    )
+
+
 def _dispatch_phase(
     invocations: list[WorkerInvocation],
     profile: Profile,
     phase: PhaseSpec,
     config: OrchestratorConfig,
+    workspace_path: Path,
 ) -> list[WorkerResult]:
     if phase.parallel:
-        return asyncio.run(_dispatch_parallel(invocations, profile, config))
-    return _dispatch_sequential(invocations, profile)
+        return asyncio.run(
+            _dispatch_parallel(invocations, profile, config, workspace_path, phase.id)
+        )
+    return _dispatch_sequential(invocations, profile, workspace_path, phase.id)
 
 
 async def _dispatch_parallel(
     invocations: list[WorkerInvocation],
     profile: Profile,
     config: OrchestratorConfig,
+    workspace_path: Path,
+    phase_id: str,
 ) -> list[WorkerResult]:
     sem = asyncio.Semaphore(config.max_concurrent)
 
@@ -167,9 +228,11 @@ async def _dispatch_parallel(
         async with sem:
             sys_prompt, tools = _resolve_role(inv, profile)
             schema = _resolve_schema(inv, profile)
-            return await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 dispatch_worker, inv, sys_prompt, tools, output_schema=schema
             )
+            _record_event(workspace_path, phase_id, inv, result)
+            return result
 
     results: list[WorkerResult] = list(
         await asyncio.gather(*(_one(inv) for inv in invocations))
@@ -180,12 +243,16 @@ async def _dispatch_parallel(
 def _dispatch_sequential(
     invocations: list[WorkerInvocation],
     profile: Profile,
+    workspace_path: Path,
+    phase_id: str,
 ) -> list[WorkerResult]:
     results: list[WorkerResult] = []
     for inv in invocations:
         sys_prompt, tools = _resolve_role(inv, profile)
         schema = _resolve_schema(inv, profile)
-        results.append(dispatch_worker(inv, sys_prompt, tools, output_schema=schema))
+        result = dispatch_worker(inv, sys_prompt, tools, output_schema=schema)
+        _record_event(workspace_path, phase_id, inv, result)
+        results.append(result)
     return results
 
 
@@ -194,7 +261,10 @@ def _resolve_role(inv: WorkerInvocation, profile: Profile) -> tuple[str, list[st
     role = profile.roles.get(role_name) or profile.process_roles.get(role_name)
     if role is None:
         raise ValueError(f"role not found in profile: {role_name}")
-    return role.system_prompt, role.tools
+    # ChainableUndefined: missing vars render as empty string, not an exception.
+    template = jinja2.Template(role.system_prompt, undefined=jinja2.ChainableUndefined)
+    system_prompt = template.render(**inv.extra_context)
+    return system_prompt, role.tools
 
 
 def _resolve_schema(
