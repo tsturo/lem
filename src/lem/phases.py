@@ -2,7 +2,9 @@
 """Declarative PHASES: list[PhaseSpec]."""
 
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
+
+import yaml
 
 from lem.schema.parser import parse_file
 from lem.types import PhaseSpec, Profile, RunState, WorkerInvocation
@@ -217,7 +219,48 @@ def _critique_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvoca
 
 
 def _synthesize_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:
-    return []
+    assumptions_path = state.workspace_path / "assumptions.yaml"
+    # >50% load-bearing unconfirmed → synthesizer flags insufficient_info
+    verdict_constraint = "free_choice"
+    if assumptions_path.exists():
+        try:
+            data: Any = yaml.safe_load(assumptions_path.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                items: list[Any] = cast("list[Any]", data)
+                rows: list[dict[str, Any]] = [
+                    a for a in items
+                    if isinstance(a, dict)
+                    and cast("dict[str, Any]", a).get(
+                        "would_change_verdict_if_false"
+                    ) in ("yes", "maybe")
+                ]
+                if rows:
+                    unconfirmed = [a for a in rows if not a.get("confirmed")]
+                    if len(unconfirmed) / len(rows) > 0.5:
+                        verdict_constraint = "insufficient_info"
+        except Exception:
+            pass
+
+    decisions = [state.workspace_path / s / "decision.md" for s in profile.specialists]
+    return [WorkerInvocation(
+        role_path=profile.source_dir.parent / "process_roles" / "synthesizer.md",
+        workspace_path=state.workspace_path,
+        output_path=state.workspace_path / "deliverables" / "executive-summary.md",
+        allowed_read_paths=[
+            state.workspace_path / "idea.md",
+            state.workspace_path / "assumptions.yaml",
+            state.workspace_path / "disagreements.md",
+            state.workspace_path / "frame-shifter" / "draft-1.md",
+            state.workspace_path / "meta" / "distilled" / "post-explore.md",
+            state.workspace_path / "cross-critique.md",
+            state.workspace_path / "kill-case.md",
+            *(d for d in decisions if d.exists()),
+        ],
+        model="opus",
+        max_output_tokens=8000,
+        timeout_s=1200,
+        extra_context={"verdict_constraint": verdict_constraint},
+    )]
 
 
 def _explore_gate_fn(state: RunState) -> bool:

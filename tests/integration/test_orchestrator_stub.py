@@ -41,9 +41,23 @@ def _make_role(name: str = "stub-role") -> Role:
     )
 
 
+_PROCESS_ROLE_NAMES = [
+    "jtbd-extractor",
+    "disagreement-detector",
+    "frame-shifter",
+    "branch-skeptic",
+    "pruner",
+    "distiller",
+    "cross-skeptic",
+    "kill-case-skeptic",
+    "synthesizer",
+]
+
+
 @pytest.fixture
 def stub_profile() -> Profile:
     role = _make_role("stub-role")
+    process_roles = {name: _make_role(name) for name in _PROCESS_ROLE_NAMES}
     return Profile(
         name="stub",
         description="stub profile",
@@ -52,7 +66,7 @@ def stub_profile() -> Profile:
         default_deliverables=[],
         flag_gated_deliverables={},
         roles={"stub-role": role},
-        process_roles={},
+        process_roles=process_roles,
         intake_prompt="",
         source_dir=Path("/stub"),
     )
@@ -107,8 +121,9 @@ def _patch_phase_workers(
     gate_fn: Any = ...,
 ) -> None:
     """Replace workers_fn (and optionally gate_fn) on the named phase in lem.orchestrator.PHASES."""
+    import lem.orchestrator as _orch
     patched = []
-    for p in PHASES:
+    for p in _orch.PHASES:
         if p.id == phase_id:
             kwargs: dict[str, Any] = {"workers_fn": workers_fn}
             if gate_fn is not ...:
@@ -116,6 +131,13 @@ def _patch_phase_workers(
             patched.append(dataclasses.replace(p, **kwargs))
         else:
             patched.append(p)
+    monkeypatch.setattr("lem.orchestrator.PHASES", patched)
+
+
+def _patch_all_phases_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set every phase's workers_fn to return [] for isolation."""
+    empty: Any = lambda s, p: []
+    patched = [dataclasses.replace(p, workers_fn=empty) for p in PHASES]
     monkeypatch.setattr("lem.orchestrator.PHASES", patched)
 
 
@@ -151,6 +173,7 @@ def test_full_pipeline_iterates_all_phases(
         return _ok_result(inv)
 
     inv = _make_invocation(tmp_path)
+    _patch_all_phases_empty(monkeypatch)
     _patch_phase_workers(monkeypatch, "0", lambda s, p: [inv])
     monkeypatch.setattr("lem.orchestrator.dispatch_worker", fake_dispatch)
 
@@ -217,6 +240,7 @@ def test_gate_fn_false_skips_phase(
         return _ok_result(inv)
 
     inv = _make_invocation(tmp_path)
+    _patch_all_phases_empty(monkeypatch)
     _patch_phase_workers(monkeypatch, "0", lambda s, p: [inv], gate_fn=lambda s: False)
     monkeypatch.setattr("lem.orchestrator.dispatch_worker", fake_dispatch)
 
@@ -383,6 +407,7 @@ def test_parallel_phase_dispatches_all(
         return _ok_result(inv)
 
     # Phase "1" (Discover) is parallel=True
+    _patch_all_phases_empty(monkeypatch)
     _patch_phase_workers(monkeypatch, "1", lambda s, p: invs)
     monkeypatch.setattr("lem.orchestrator.dispatch_worker", fake_dispatch)
 
@@ -463,6 +488,7 @@ def test_empty_workers_fn_skips_dispatch(
         dispatched.append(inv)
         return _ok_result(inv)
 
+    _patch_all_phases_empty(monkeypatch)
     monkeypatch.setattr("lem.orchestrator.dispatch_worker", fake_dispatch)
 
     state = run_orchestrator(tmp_path, stub_profile)

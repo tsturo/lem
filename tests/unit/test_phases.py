@@ -522,6 +522,93 @@ def test_critique_both_model_opus(tmp_path: Path) -> None:
         assert inv.model == "opus"
 
 
+# ── Task 6.9: Synthesize workers_fn ──────────────────────────────────────────
+
+
+def test_synthesize_returns_one_invocation(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    state = _make_state(tmp_path / "workspace")
+    result = get_phase("4").workers_fn(state, profile)
+    assert len(result) == 1
+
+
+def test_synthesize_model_is_opus(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("4").workers_fn(state, profile)[0]
+    assert inv.model == "opus"
+
+
+def test_synthesize_output_is_executive_summary(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    inv = get_phase("4").workers_fn(state, profile)[0]
+    assert inv.output_path == ws / "deliverables" / "executive-summary.md"
+
+
+def test_synthesize_verdict_free_choice_when_no_assumptions(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("4").workers_fn(state, profile)[0]
+    assert inv.extra_context["verdict_constraint"] == "free_choice"
+
+
+def test_synthesize_verdict_free_choice_when_all_confirmed(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    (ws / "assumptions.yaml").write_text(
+        "- would_change_verdict_if_false: yes\n  confirmed: true\n"
+        "- would_change_verdict_if_false: yes\n  confirmed: true\n",
+        encoding="utf-8",
+    )
+    profile = _make_profile_with_specialists(tmp_path / "profiles" / "app-idea", [])
+    state = _make_state(ws)
+    inv = get_phase("4").workers_fn(state, profile)[0]
+    assert inv.extra_context["verdict_constraint"] == "free_choice"
+
+
+def test_synthesize_verdict_insufficient_when_majority_unconfirmed(
+    tmp_path: Path,
+) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    (ws / "assumptions.yaml").write_text(
+        "- would_change_verdict_if_false: yes\n  confirmed: false\n"
+        "- would_change_verdict_if_false: maybe\n  confirmed: false\n"
+        "- would_change_verdict_if_false: yes\n  confirmed: true\n",
+        encoding="utf-8",
+    )
+    profile = _make_profile_with_specialists(tmp_path / "profiles" / "app-idea", [])
+    state = _make_state(ws)
+    inv = get_phase("4").workers_fn(state, profile)[0]
+    assert inv.extra_context["verdict_constraint"] == "insufficient_info"
+
+
+def test_synthesize_verdict_free_choice_when_exactly_50pct_unconfirmed(
+    tmp_path: Path,
+) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    (ws / "assumptions.yaml").write_text(
+        "- would_change_verdict_if_false: yes\n  confirmed: false\n"
+        "- would_change_verdict_if_false: yes\n  confirmed: true\n",
+        encoding="utf-8",
+    )
+    profile = _make_profile_with_specialists(tmp_path / "profiles" / "app-idea", [])
+    state = _make_state(ws)
+    inv = get_phase("4").workers_fn(state, profile)[0]
+    assert inv.extra_context["verdict_constraint"] == "free_choice"
+
+
 # ── explore gate_fn tests ─────────────────────────────────────────────────────
 
 
