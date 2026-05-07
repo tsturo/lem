@@ -13,7 +13,16 @@ def _intake_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocati
 
 
 def _jtbd_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:
-    return []
+    return [WorkerInvocation(
+        role_path=profile.source_dir.parent / "process_roles" / "jtbd-extractor.md",
+        workspace_path=state.workspace_path,
+        output_path=state.workspace_path / "frame-shifter" / "jtbd.md",
+        allowed_read_paths=[state.workspace_path / "idea.md"],
+        model="sonnet",
+        max_output_tokens=300,
+        timeout_s=300,
+        extra_context={},
+    )]
 
 
 def _discover_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:

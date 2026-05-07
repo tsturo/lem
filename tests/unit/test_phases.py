@@ -91,12 +91,94 @@ def test_non_explore_gate_fns_are_none() -> None:
 # ── workers_fn smoke tests ────────────────────────────────────────────────────
 
 
-def test_all_workers_fn_return_empty_list(tmp_path: Path) -> None:
+def test_intake_workers_fn_returns_empty_list(tmp_path: Path) -> None:
+    state = _make_state(tmp_path)
+    profile = _make_profile()
+    result = get_phase("0").workers_fn(state, profile)
+    assert result == []
+
+
+def test_all_workers_fn_return_list(tmp_path: Path) -> None:
     state = _make_state(tmp_path)
     profile = _make_profile()
     for phase in PHASES:
         result: list[WorkerInvocation] = phase.workers_fn(state, profile)
-        assert result == [], f"phase {phase.id} workers_fn should return []"
+        assert isinstance(result, list), f"phase {phase.id} workers_fn must return a list"
+
+
+# ── worker_fn helpers ─────────────────────────────────────────────────────────
+
+
+def _make_profile_with_specialists(
+    source_dir: Path, specialists: list[str]
+) -> Profile:
+    role = Role(
+        name="stub",
+        description="stub",
+        model="haiku",
+        worker="cli",
+        phase=None,
+        output_cap=1024,
+        timeout_s=30,
+        branchable="no",
+        output_schema={},
+        tools=[],
+        system_prompt="",
+        source_path=source_dir,
+    )
+    return Profile(
+        name="stub",
+        description="stub",
+        specialists=specialists,
+        verdict_options=[],
+        default_deliverables=[],
+        flag_gated_deliverables={},
+        roles={s: role for s in specialists},
+        process_roles={},
+        intake_prompt="",
+        source_dir=source_dir,
+    )
+
+
+# ── Task 6.2: JTBD workers_fn ─────────────────────────────────────────────────
+
+
+def test_jtbd_returns_one_invocation(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(tmp_path / "profiles" / "app-idea", [])
+    state = _make_state(tmp_path / "workspace")
+    result = get_phase("0.5").workers_fn(state, profile)
+    assert len(result) == 1
+
+
+def test_jtbd_role_path_is_jtbd_extractor(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(tmp_path / "profiles" / "app-idea", [])
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("0.5").workers_fn(state, profile)[0]
+    assert inv.role_path.name == "jtbd-extractor.md"
+    assert inv.role_path.parent.name == "process_roles"
+
+
+def test_jtbd_output_path(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(tmp_path / "profiles" / "app-idea", [])
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    inv = get_phase("0.5").workers_fn(state, profile)[0]
+    assert inv.output_path == ws / "frame-shifter" / "jtbd.md"
+
+
+def test_jtbd_reads_idea_md(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(tmp_path / "profiles" / "app-idea", [])
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    inv = get_phase("0.5").workers_fn(state, profile)[0]
+    assert ws / "idea.md" in inv.allowed_read_paths
+
+
+def test_jtbd_model_is_sonnet(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(tmp_path / "profiles" / "app-idea", [])
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("0.5").workers_fn(state, profile)[0]
+    assert inv.model == "sonnet"
 
 
 # ── explore gate_fn tests ─────────────────────────────────────────────────────
