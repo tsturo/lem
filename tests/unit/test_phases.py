@@ -10,10 +10,10 @@ from lem.types import Profile, Role, RunState, WorkerInvocation
 
 
 _EXPECTED_IDS = [
-    "0", "0.5", "1", "1.5", "1.6", "2.1", "2.2", "2.3", "2.5", "3", "4",
+    "0", "0.5", "0.6", "1", "1.5", "2.1", "2.2", "2.3", "2.5", "3", "4",
 ]
 _EXPECTED_NAMES = [
-    "Intake", "JTBD", "Discover", "Disagreement", "Reframe",
+    "Intake", "JTBD", "Reframe", "Discover", "Disagreement",
     "Explore", "Explore", "Explore", "Distill", "Critique", "Synthesize",
 ]
 
@@ -284,7 +284,7 @@ def test_reframe_returns_one_invocation(tmp_path: Path) -> None:
         tmp_path / "profiles" / "app-idea", ["alpha"]
     )
     state = _make_state(tmp_path / "workspace")
-    result = get_phase("1.6").workers_fn(state, profile)
+    result = get_phase("0.6").workers_fn(state, profile)
     assert len(result) == 1
 
 
@@ -293,7 +293,7 @@ def test_reframe_role_is_frame_shifter(tmp_path: Path) -> None:
         tmp_path / "profiles" / "app-idea", ["alpha"]
     )
     state = _make_state(tmp_path / "workspace")
-    inv = get_phase("1.6").workers_fn(state, profile)[0]
+    inv = get_phase("0.6").workers_fn(state, profile)[0]
     assert inv.role_path.name == "frame-shifter.md"
 
 
@@ -302,7 +302,7 @@ def test_reframe_model_is_opus(tmp_path: Path) -> None:
         tmp_path / "profiles" / "app-idea", ["alpha"]
     )
     state = _make_state(tmp_path / "workspace")
-    inv = get_phase("1.6").workers_fn(state, profile)[0]
+    inv = get_phase("0.6").workers_fn(state, profile)[0]
     assert inv.model == "opus"
 
 
@@ -312,8 +312,18 @@ def test_reframe_output_path(tmp_path: Path) -> None:
     )
     ws = tmp_path / "workspace"
     state = _make_state(ws)
-    inv = get_phase("1.6").workers_fn(state, profile)[0]
+    inv = get_phase("0.6").workers_fn(state, profile)[0]
     assert inv.output_path == ws / "frame-shifter" / "draft-1.md"
+
+
+def test_reframe_does_not_read_specialist_drafts(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    inv = get_phase("0.6").workers_fn(state, profile)[0]
+    assert ws / "alpha" / "draft-1.md" not in inv.allowed_read_paths
 
 
 def test_reframe_no_fragment_file_gives_empty_string(tmp_path: Path) -> None:
@@ -321,7 +331,7 @@ def test_reframe_no_fragment_file_gives_empty_string(tmp_path: Path) -> None:
         tmp_path / "profiles" / "app-idea", []
     )
     state = _make_state(tmp_path / "workspace")
-    inv = get_phase("1.6").workers_fn(state, profile)[0]
+    inv = get_phase("0.6").workers_fn(state, profile)[0]
     assert inv.extra_context["prompt_fragment"] == ""
 
 
@@ -332,8 +342,18 @@ def test_reframe_reads_fragment_when_exists(tmp_path: Path) -> None:
     (frags_dir / "frame-shifter.md").write_text("custom fragment", encoding="utf-8")
     profile = _make_profile_with_specialists(source_dir, [])
     state = _make_state(tmp_path / "workspace")
-    inv = get_phase("1.6").workers_fn(state, profile)[0]
+    inv = get_phase("0.6").workers_fn(state, profile)[0]
     assert inv.extra_context["prompt_fragment"] == "custom fragment"
+
+
+def test_discover_reads_frame_shifter_draft(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    inv = get_phase("1").workers_fn(state, profile)[0]
+    assert ws / "frame-shifter" / "draft-1.md" in inv.allowed_read_paths
 
 
 # ── Task 6.6: Explore workers_fn ─────────────────────────────────────────────
@@ -714,6 +734,6 @@ def test_next_phase_returns_none_for_last() -> None:
 
 
 def test_next_phase_middle_of_pipeline() -> None:
-    nxt = next_phase("1.5")
+    nxt = next_phase("0.5")
     assert nxt is not None
-    assert nxt.id == "1.6"
+    assert nxt.id == "0.6"

@@ -39,6 +39,7 @@ def _discover_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvoca
                 state.workspace_path / "idea.md",
                 state.workspace_path / "assumptions.yaml",
                 state.workspace_path / "frame-shifter" / "jtbd.md",
+                state.workspace_path / "frame-shifter" / "draft-1.md",
             ],
             model="sonnet",
             max_output_tokens=2000,
@@ -70,7 +71,6 @@ def _reframe_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocat
     fragment = (
         fragment_path.read_text(encoding="utf-8") if fragment_path.exists() else ""
     )
-    drafts = [state.workspace_path / s / "draft-1.md" for s in profile.specialists]
     return [WorkerInvocation(
         role_path=profile.source_dir.parent / "process_roles" / "frame-shifter.md",
         workspace_path=state.workspace_path,
@@ -79,7 +79,6 @@ def _reframe_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocat
             state.workspace_path / "idea.md",
             state.workspace_path / "assumptions.yaml",
             state.workspace_path / "frame-shifter" / "jtbd.md",
-            *drafts,
         ],
         model="opus",
         max_output_tokens=2500,
@@ -306,6 +305,7 @@ def _explore_gate_fn(state: RunState) -> bool:
 PHASES: list[PhaseSpec] = [
     PhaseSpec(id="0", name="Intake", workers_fn=_intake_workers_fn, parallel=False),
     PhaseSpec(id="0.5", name="JTBD", workers_fn=_jtbd_workers_fn, parallel=False),
+    PhaseSpec(id="0.6", name="Reframe", workers_fn=_reframe_workers_fn, parallel=False),
     PhaseSpec(id="1", name="Discover", workers_fn=_discover_workers_fn, parallel=True),
     PhaseSpec(
         id="1.5",
@@ -313,7 +313,6 @@ PHASES: list[PhaseSpec] = [
         workers_fn=_disagreement_workers_fn,
         parallel=False,
     ),
-    PhaseSpec(id="1.6", name="Reframe", workers_fn=_reframe_workers_fn, parallel=False),
     PhaseSpec(
         id="2.1",
         name="Explore",
