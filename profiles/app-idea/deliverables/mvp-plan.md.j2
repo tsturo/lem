@@ -1,0 +1,61 @@
+# MVP Plan
+
+## Problem and user
+
+**Target user:** {{ target_user }}
+
+**The job-to-be-done:** {{ jtbd }}
+
+**Why now:** {{ why_now }}
+
+## MVP scope
+
+**In scope (must ship):**
+{% for item in mvp_in_scope %}
+- {{ item }}
+{% endfor %}
+
+**Out of scope (deliberately deferred):**
+{% for item in mvp_out_of_scope %}
+- {{ item }}
+{% endfor %}
+
+## Architecture sketch
+
+{{ architecture_sketch }}
+
+**Data entities:** {{ data_entities | join(", ") }}
+**External dependencies:** {{ external_dependencies | join(", ") if external_dependencies else "none" }}
+**State locus:** {{ state_locus }}
+
+## UX flow
+
+**Core interaction pattern:** {{ core_interaction_pattern }}
+
+**Primary flow:**
+{% for step in primary_flow_steps %}
+{{ loop.index }}. {{ step }}
+{% endfor %}
+
+## 3-phase build sequence
+
+### Phase 1: {{ phase_1.name }}
+**Goal:** {{ phase_1.goal }}
+**Effort:** {{ phase_1.effort }}
+**Deliverable:** {{ phase_1.deliverable }}
+
+### Phase 2: {{ phase_2.name }}
+**Goal:** {{ phase_2.goal }}
+**Effort:** {{ phase_2.effort }}
+**Deliverable:** {{ phase_2.deliverable }}
+
+### Phase 3: {{ phase_3.name }}
+**Goal:** {{ phase_3.goal }}
+**Effort:** {{ phase_3.effort }}
+**Deliverable:** {{ phase_3.deliverable }}
+
+## Open questions
+
+{% for q in open_questions %}
+- {{ q }}
+{% endfor %}
