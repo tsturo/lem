@@ -54,11 +54,12 @@ def write_state(state: RunState) -> None:
     data = json.dumps(_to_dict(state), indent=2).encode("utf-8")
     fd, tmp_path = tempfile.mkstemp(dir=meta, prefix="state.json.", suffix=".tmp")
     try:
-        os.write(fd, data)
-        os.close(fd)
+        try:
+            os.write(fd, data)
+        finally:
+            os.close(fd)
         os.replace(tmp_path, target)
     except Exception:
-        os.close(fd)
         try:
             os.unlink(tmp_path)
         except OSError:

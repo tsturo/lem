@@ -38,11 +38,12 @@ def write_event(
             )
     fd, tmp_path = tempfile.mkstemp(dir=events_dir, prefix=".evt.", suffix=".tmp")
     try:
-        os.write(fd, data)
-        os.close(fd)
+        try:
+            os.write(fd, data)
+        finally:
+            os.close(fd)
         os.replace(tmp_path, target)
     except Exception:
-        os.close(fd)
         try:
             os.unlink(tmp_path)
         except OSError:

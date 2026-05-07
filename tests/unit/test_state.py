@@ -231,7 +231,9 @@ def test_read_log_roundtrip(tmp_path: Path) -> None:
         assert rest.message == orig.message
 
 
-def test_read_log_skips_malformed(tmp_path: Path) -> None:
+def test_read_log_skips_malformed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     meta = tmp_path / "meta"
     meta.mkdir()
     log_path = meta / "log.jsonl"
@@ -241,3 +243,5 @@ def test_read_log_skips_malformed(tmp_path: Path) -> None:
         fh.write("THIS IS NOT JSON\n")
     result = list(read_log(tmp_path))
     assert len(result) == 3
+    captured = capsys.readouterr()
+    assert "log.jsonl" in captured.err or "malformed" in captured.err.lower()
