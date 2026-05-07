@@ -242,3 +242,77 @@ def test_stub_mode_without_dir_writes_placeholder(
     # Even with placeholders, orchestrator must not crash
     assert state.status in ("completed", "failed", "cost-aborted")
     assert (workspace / "frame-shifter" / "jtbd.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# 9. cost.jsonl populated after stub run (Fix #3)
+# ---------------------------------------------------------------------------
+
+
+def test_cost_jsonl_populated_after_stub_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LEM_STUB_MODE", "1")
+    monkeypatch.setenv("LEM_STUB_MODE_DIR", str(CANNED_DIR))
+
+    workspace = tmp_path / "workspace"
+    _seed_workspace(workspace)
+
+    profile = load_profile_from_path(STUB_PROFILE_DIR)
+    state = run_orchestrator(workspace, profile, OrchestratorConfig(max_concurrent=2))
+
+    assert state.status == "completed"
+
+    cost_jsonl = workspace / "meta" / "cost.jsonl"
+    assert cost_jsonl.exists(), "cost.jsonl must exist after a completed run"
+
+    lines = [ln for ln in cost_jsonl.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert len(lines) >= 1, "cost.jsonl must have at least one line"
+
+    # Each line must be valid JSON with expected fields
+    for line in lines:
+        event = json.loads(line)
+        assert "role" in event
+        assert "model" in event
+        assert "tokens_in" in event
+        assert "tokens_out" in event
+        assert "cost_usd" in event
+
+    # state.cost_so_far must be > 0 because stub workers return non-zero tokens
+    assert state.cost_so_far > 0, "cost_so_far must be > 0 after dispatching stub workers"
+
+    # meta/events/ must have event files
+    events_dir = workspace / "meta" / "events"
+    assert events_dir.exists(), "meta/events/ directory must exist"
+    event_files = list(events_dir.glob("*.json"))
+    assert len(event_files) >= 1, "at least one event file must exist in meta/events/"
+
+    # one event file per dispatched worker — the stub profile dispatches 9 workers
+    # (jtbd-extractor, architect+designer+market, disagreement-detector,
+    # frame-shifter, distiller, cross-skeptic+kill-case-skeptic, synthesizer)
+    assert len(lines) == len(event_files), (
+        f"cost.jsonl lines ({len(lines)}) must match event files ({len(event_files)})"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 10. Cost-ceiling aborts run when max_cost is tiny (Fix #2)
+# ---------------------------------------------------------------------------
+
+
+def test_cost_ceiling_aborts_stub_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LEM_STUB_MODE", "1")
+    monkeypatch.setenv("LEM_STUB_MODE_DIR", str(CANNED_DIR))
+
+    workspace = tmp_path / "workspace"
+    _seed_workspace(workspace)
+
+    profile = load_profile_from_path(STUB_PROFILE_DIR)
+    cfg = OrchestratorConfig(max_cost=0.0001)
+    state = run_orchestrator(workspace, profile, cfg)
+
+    assert state.status == "cost-aborted"
+    assert state.error is not None
+    assert "cost ceiling breach" in state.error
