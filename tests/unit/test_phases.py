@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from lem.phases import PHASES, get_phase, next_phase, phase_index
+from lem.phases import (
+    PHASES,
+    archive_pruner_losers,
+    get_phase,
+    next_phase,
+    phase_index,
+)
 from lem.types import Profile, Role, RunState, WorkerInvocation
 
 
@@ -843,3 +849,142 @@ def test_next_phase_middle_of_pipeline() -> None:
     nxt = next_phase("0.5")
     assert nxt is not None
     assert nxt.id == "0.6"
+
+
+# ── archive_pruner_losers tests (Fix #6) ──────────────────────────────────────
+
+
+def _write_decision(
+    domain_dir: Path,
+    *,
+    survivor: str,
+    summary: str = "alt",
+    tradeoff: str = "td",
+    revisit: str = "rv",
+    cost: str = "co",
+) -> None:
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    (domain_dir / "decision.md").write_text(
+        "---\n"
+        f"domain: {domain_dir.name}\n"
+        f"survivor: {survivor}\n"
+        f"rationale_oneline: r\n"
+        f"archived_option_summary: {summary}\n"
+        f"archived_specific_tradeoff: {tradeoff}\n"
+        f"archived_revisit_if: {revisit}\n"
+        f"archived_cost_of_being_wrong: {cost}\n"
+        "---\n\n"
+        "## Decision\n\nbody\n",
+        encoding="utf-8",
+    )
+
+
+def test_archive_pruner_loser_a(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {"alpha": "axis"})
+    domain = ws / "alpha"
+    domain.mkdir()
+    (domain / "option-a.md").write_text(
+        "---\nname: a\n---\n\nA body\n", encoding="utf-8"
+    )
+    (domain / "option-b.md").write_text(
+        "---\nname: b\n---\n\nB body\n", encoding="utf-8"
+    )
+    _write_decision(domain, survivor="b")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    archive_pruner_losers(state, profile)
+    archived = domain / "_archive" / "option-a.md"
+    assert archived.exists()
+    text = archived.read_text(encoding="utf-8")
+    assert "rejected: true" in text
+    assert "alternative:" in text
+    assert "specific_tradeoff:" in text
+    assert "revisit_if:" in text
+    assert "cost_of_being_wrong:" in text
+    assert "A body" in text
+
+
+def test_archive_pruner_loser_b(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {"alpha": "axis"})
+    domain = ws / "alpha"
+    domain.mkdir()
+    (domain / "option-a.md").write_text(
+        "---\nname: a\n---\n\nA body\n", encoding="utf-8"
+    )
+    (domain / "option-b.md").write_text(
+        "---\nname: b\n---\n\nB body\n", encoding="utf-8"
+    )
+    _write_decision(domain, survivor="a")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    archive_pruner_losers(state, profile)
+    archived = domain / "_archive" / "option-b.md"
+    assert archived.exists()
+    assert "B body" in archived.read_text(encoding="utf-8")
+
+
+def test_archive_pruner_neither_survivor_no_archive(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {"alpha": "axis"})
+    domain = ws / "alpha"
+    domain.mkdir()
+    (domain / "option-a.md").write_text("A", encoding="utf-8")
+    (domain / "option-b.md").write_text("B", encoding="utf-8")
+    _write_decision(domain, survivor="neither")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    archive_pruner_losers(state, profile)
+    assert not (domain / "_archive").exists()
+
+
+def test_archive_pruner_idempotent(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {"alpha": "axis"})
+    domain = ws / "alpha"
+    domain.mkdir()
+    (domain / "option-a.md").write_text(
+        "---\nx: 1\n---\n\nA body original\n", encoding="utf-8"
+    )
+    (domain / "option-b.md").write_text(
+        "---\nx: 2\n---\n\nB body\n", encoding="utf-8"
+    )
+    _write_decision(domain, survivor="b")
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    archive_pruner_losers(state, profile)
+    archived = domain / "_archive" / "option-a.md"
+    first = archived.read_text(encoding="utf-8")
+    # Second call must not overwrite or corrupt the archive
+    archive_pruner_losers(state, profile)
+    assert archived.read_text(encoding="utf-8") == first
+
+
+def test_archive_pruner_skips_non_branching(tmp_path: Path) -> None:
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    _write_disagreements(ws, {})  # no branching
+    domain = ws / "alpha"
+    domain.mkdir()
+    (domain / "decision.md").write_text(
+        "---\nsurvivor: a\n---\n\n", encoding="utf-8"
+    )
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(ws)
+    archive_pruner_losers(state, profile)
+    assert not (domain / "_archive").exists()

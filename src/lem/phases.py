@@ -219,6 +219,53 @@ def _explore_prune_workers_fn(
     return invocations
 
 
+def _archive_loser(domain_dir: Path, decision_fm: dict[str, object]) -> None:
+    """Write _archive/option-<loser>.md combining loser body + rejection frontmatter.
+
+    Idempotent: if `_archive/option-<loser>.md` already exists, do nothing.
+    No-op if survivor is "neither" or invalid (no clear loser to archive).
+    """
+    survivor = str(decision_fm.get("survivor", "")).strip()
+    if survivor not in ("a", "b"):
+        return
+    loser_label = "b" if survivor == "a" else "a"
+    loser_src = domain_dir / f"option-{loser_label}.md"
+    if not loser_src.exists():
+        return
+    archive_dir = domain_dir / "_archive"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = archive_dir / f"option-{loser_label}.md"
+    if archive_path.exists():
+        return
+
+    archived_fm: dict[str, object] = {
+        "rejected": True,
+        "alternative": decision_fm.get("archived_option_summary", ""),
+        "specific_tradeoff": decision_fm.get("archived_specific_tradeoff", ""),
+        "revisit_if": decision_fm.get("archived_revisit_if", ""),
+        "cost_of_being_wrong": decision_fm.get("archived_cost_of_being_wrong", ""),
+    }
+
+    loser_doc = parse_file(loser_src)
+    fm_yaml = yaml.safe_dump(archived_fm, sort_keys=False, allow_unicode=True).rstrip()
+    text = "---\n" + fm_yaml + "\n---\n\n" + loser_doc.body.lstrip("\n")
+    archive_path.write_text(text, encoding="utf-8")
+
+
+def archive_pruner_losers(state: RunState, profile: Profile) -> None:
+    """Post-process Phase 2.3 outputs: archive each branching domain's loser."""
+    for spec_name, _axis in _branching_specialists(state, profile):
+        domain_dir = state.workspace_path / spec_name
+        decision_path = domain_dir / "decision.md"
+        if not decision_path.exists():
+            continue
+        try:
+            decision_doc = parse_file(decision_path)
+        except Exception:
+            continue
+        _archive_loser(domain_dir, decision_doc.frontmatter)
+
+
 def _distill_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:
     decisions = [state.workspace_path / s / "decision.md" for s in profile.specialists]
     core_inputs = [

@@ -20,7 +20,7 @@ from lem.failure.ceiling import (
 )
 from lem.hooks import fire_on_complete, fire_on_error, load_hook_config, post_webhook
 from lem.notify import notify
-from lem.phases import PHASES
+from lem.phases import PHASES, archive_pruner_losers
 from lem.post_synthesis import post_synthesize_verdict_check
 from lem.state.cost import aggregate_phase, run_total
 from lem.state.events import write_event
@@ -112,6 +112,9 @@ def run_orchestrator(
             results = _dispatch_phase(invocations, profile, phase, cfg, workspace_path)
 
             aggregate_phase(workspace_path, phase.id, state.run_id)
+
+            if phase.id == "2.3":
+                archive_pruner_losers(state, profile)
 
             if phase.id == "4":
                 post_synthesize_verdict_check(state, profile)

@@ -12,6 +12,10 @@ output_schema:
     domain: str
     survivor: enum
     rationale_oneline: str
+    archived_option_summary: str
+    archived_specific_tradeoff: str
+    archived_revisit_if: str
+    archived_cost_of_being_wrong: str
   required_sections:
     - Decision
     - Rationale
@@ -42,6 +46,10 @@ You write `decision.md` for the domain. The frontmatter must declare which optio
 - `domain` — string matching the domain name (e.g., `"architect"`, `"market"`).
 - `survivor` — one of `a | b | neither`. `"neither"` is reserved for the case where both options are dominated by their skeptics' critiques and the orchestrator should escalate (rare but valid).
 - `rationale_oneline` — one short sentence summarizing the choice. Example: `"Option A: skeptic's pricing concern is real but recoverable; Option B's audience-fit risk is structural."`
+- `archived_option_summary` — one-line description of the rejected option (the loser). Used by the orchestrator to build `<domain>/_archive/option-<loser>.md` for the synthesizer's `risks-and-rejected-paths.md`.
+- `archived_specific_tradeoff` — what the loser specifically gave up that made it worse. Concrete; not "less good." Example: `"locked the data model into client-side IndexedDB which blocks multi-device sync."`
+- `archived_revisit_if` — the falsifiable condition under which the loser would become the right choice again. Example: `"if user research finds that >40% of target users have only one device."`
+- `archived_cost_of_being_wrong` — what we lose if the survivor turns out worse than the rejected alternative. Example: `"6 weeks of rebuild work; existing user data needs migration."`
 
 ### `## Decision`
 
