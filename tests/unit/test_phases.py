@@ -471,6 +471,57 @@ def test_distill_only_existing_decisions_in_read_paths(tmp_path: Path) -> None:
     assert ws / "beta" / "decision.md" not in inv.allowed_read_paths
 
 
+# ── Task 6.8: Critique workers_fn ────────────────────────────────────────────
+
+
+def test_critique_returns_two_invocations(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    state = _make_state(tmp_path / "workspace")
+    result = get_phase("3").workers_fn(state, profile)
+    assert len(result) == 2
+
+
+def test_critique_first_is_cross_skeptic(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("3").workers_fn(state, profile)[0]
+    assert inv.role_path.name == "cross-skeptic.md"
+    assert inv.output_path.name == "cross-critique.md"
+
+
+def test_critique_second_is_kill_case(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("3").workers_fn(state, profile)[1]
+    assert inv.role_path.name == "kill-case-skeptic.md"
+    assert inv.output_path.name == "kill-case.md"
+
+
+def test_critique_kill_case_reads_cross_critique(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    kill_inv = get_phase("3").workers_fn(state, profile)[1]
+    assert ws / "cross-critique.md" in kill_inv.allowed_read_paths
+
+
+def test_critique_both_model_opus(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    state = _make_state(tmp_path / "workspace")
+    for inv in get_phase("3").workers_fn(state, profile):
+        assert inv.model == "opus"
+
+
 # ── explore gate_fn tests ─────────────────────────────────────────────────────
 
 

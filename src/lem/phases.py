@@ -184,7 +184,36 @@ def _distill_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocat
 
 
 def _critique_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:
-    return []
+    decisions = [state.workspace_path / s / "decision.md" for s in profile.specialists]
+    distilled = state.workspace_path / "meta" / "distilled" / "post-explore.md"
+
+    cross_inv = WorkerInvocation(
+        role_path=profile.source_dir.parent / "process_roles" / "cross-skeptic.md",
+        workspace_path=state.workspace_path,
+        output_path=state.workspace_path / "cross-critique.md",
+        allowed_read_paths=[distilled, *(d for d in decisions if d.exists())],
+        model="opus",
+        max_output_tokens=2500,
+        timeout_s=600,
+        extra_context={},
+    )
+
+    kill_inv = WorkerInvocation(
+        role_path=profile.source_dir.parent / "process_roles" / "kill-case-skeptic.md",
+        workspace_path=state.workspace_path,
+        output_path=state.workspace_path / "kill-case.md",
+        allowed_read_paths=[
+            state.workspace_path / "cross-critique.md",
+            state.workspace_path / "assumptions.yaml",
+            *(d for d in decisions if d.exists()),
+        ],
+        model="opus",
+        max_output_tokens=2500,
+        timeout_s=600,
+        extra_context={},
+    )
+
+    return [cross_inv, kill_inv]
 
 
 def _synthesize_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:
