@@ -24,7 +24,15 @@ def refine(
     profile: str = typer.Option("app-idea", "--profile"),
     depth: str = typer.Option("normal", "--depth", help="quick|normal|deep"),
     model_tier: str = typer.Option("opus-heavy", "--model-tier"),
-    max_cost: float = typer.Option(25.0, "--max-cost"),
+    max_cost: Optional[float] = typer.Option(
+        None,
+        "--max-cost",
+        help=(
+            "Dollar ceiling for the run. For users on metered Anthropic API "
+            "billing. Claude Max users should ignore this — dollar costs are "
+            "notional. Default: no ceiling."
+        ),
+    ),
     max_wall_clock: int = typer.Option(4 * 3600, "--max-wall-clock"),
     max_concurrent: int = typer.Option(4, "--max-concurrent"),
     workspace: Optional[Path] = typer.Option(None, "--workspace"),

@@ -641,9 +641,10 @@ def test_undefined_extra_context_var_renders_as_empty_string(
 # ---------------------------------------------------------------------------
 
 
-def test_cost_ceiling_aborts_run(
+def test_cost_ceiling_aborts_run_when_set(
     tmp_path: Path, stub_profile: Profile, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """When max_cost is explicitly set and the projection breaches it, abort."""
     inv = _make_invocation(tmp_path)
     _patch_all_phases_empty(monkeypatch)
     _patch_phase_workers(monkeypatch, "0", lambda s, p: [inv])
@@ -660,17 +661,30 @@ def test_cost_ceiling_aborts_run(
     assert "cost ceiling breach" in state.error
 
 
-def test_generous_cost_ceiling_completes(
+def test_default_no_cost_ceiling_completes(
     tmp_path: Path, stub_profile: Profile, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Default config has no dollar ceiling; the run completes regardless."""
     monkeypatch.setattr(
         "lem.orchestrator.dispatch_worker",
         lambda i, sp, t, output_schema=None: _ok_result(i),
     )
-
-    cfg = OrchestratorConfig(max_cost=1000.0)
+    cfg = OrchestratorConfig()
+    assert cfg.max_cost is None
     state = run_orchestrator(tmp_path, stub_profile, config=cfg)
+    assert state.status == "completed"
 
+
+def test_max_cost_none_explicit_no_abort(
+    tmp_path: Path, stub_profile: Profile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explicit max_cost=None never aborts even with high projected cost."""
+    monkeypatch.setattr(
+        "lem.orchestrator.dispatch_worker",
+        lambda i, sp, t, output_schema=None: _ok_result(i),
+    )
+    cfg = OrchestratorConfig(max_cost=None)
+    state = run_orchestrator(tmp_path, stub_profile, config=cfg)
     assert state.status == "completed"
 
 

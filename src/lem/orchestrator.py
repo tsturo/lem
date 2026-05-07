@@ -41,7 +41,11 @@ from lem.workers.dispatch import dispatch_worker
 @dataclass(frozen=True)
 class OrchestratorConfig:
     max_concurrent: int = 4
-    max_cost: float = 25.0
+    # max_cost: dollar ceiling for users on metered API billing. None = off
+    # (the default for Claude Max users, where dollar costs are notional).
+    # The cost-tracking machinery still records cost.jsonl regardless; only
+    # the abort behavior is gated on this being set.
+    max_cost: float | None = None
     max_wall_clock_s: float = 4 * 60 * 60
     on_complete: Callable[[RunState], None] | None = None
     on_error: Callable[[RunState], None] | None = None
@@ -94,25 +98,27 @@ def run_orchestrator(
                 state.phase = phase.id
                 continue
 
-            projected_phase_cost = sum(
-                project_worker_cost(
-                    model=inv.model,
-                    input_estimate=_estimate_input_tokens(inv),
-                    output_cap=inv.max_output_tokens,
+            if cfg.max_cost is not None:
+                projected_phase_cost = sum(
+                    project_worker_cost(
+                        model=inv.model,
+                        input_estimate=_estimate_input_tokens(inv),
+                        output_cap=inv.max_output_tokens,
+                    )
+                    for inv in invocations
                 )
-                for inv in invocations
-            )
-            cost_verdict = check_cost_ceiling(
-                state, projected_phase_cost, max_cost=cfg.max_cost
-            )
-            if cost_verdict.breach:
-                state.status = "cost-aborted"
-                state.error = (
-                    f"cost ceiling breach: current={cost_verdict.current_spend:.4f} + "
-                    f"projected={cost_verdict.projected_worker_cost:.4f} > "
-                    f"max={cost_verdict.max_cost:.2f}"
+                cost_verdict = check_cost_ceiling(
+                    state, projected_phase_cost, max_cost=cfg.max_cost
                 )
-                break
+                if cost_verdict.breach:
+                    state.status = "cost-aborted"
+                    state.error = (
+                        f"cost ceiling breach: "
+                        f"current={cost_verdict.current_spend:.4f} + "
+                        f"projected={cost_verdict.projected_worker_cost:.4f} > "
+                        f"max={cost_verdict.max_cost:.2f}"
+                    )
+                    break
 
             results = _dispatch_phase(invocations, profile, phase, cfg, workspace_path)
 

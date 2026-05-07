@@ -243,7 +243,7 @@ def test_stub_mode_without_dir_writes_placeholder(
     state = run_orchestrator(workspace, profile)
 
     # Even with placeholders, orchestrator must not crash
-    assert state.status in ("completed", "failed", "cost-aborted")
+    assert state.status in ("completed", "failed")
     assert (workspace / "frame-shifter" / "jtbd.md").exists()
 
 
