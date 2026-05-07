@@ -271,6 +271,66 @@ def test_disagreement_output_path(tmp_path: Path) -> None:
     assert inv.output_path == ws / "disagreements.md"
 
 
+# ── Task 6.5: Reframe workers_fn ─────────────────────────────────────────────
+
+
+def test_reframe_returns_one_invocation(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(tmp_path / "workspace")
+    result = get_phase("1.6").workers_fn(state, profile)
+    assert len(result) == 1
+
+
+def test_reframe_role_is_frame_shifter(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("1.6").workers_fn(state, profile)[0]
+    assert inv.role_path.name == "frame-shifter.md"
+
+
+def test_reframe_model_is_opus(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("1.6").workers_fn(state, profile)[0]
+    assert inv.model == "opus"
+
+
+def test_reframe_output_path(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", ["alpha"]
+    )
+    ws = tmp_path / "workspace"
+    state = _make_state(ws)
+    inv = get_phase("1.6").workers_fn(state, profile)[0]
+    assert inv.output_path == ws / "frame-shifter" / "draft-1.md"
+
+
+def test_reframe_no_fragment_file_gives_empty_string(tmp_path: Path) -> None:
+    profile = _make_profile_with_specialists(
+        tmp_path / "profiles" / "app-idea", []
+    )
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("1.6").workers_fn(state, profile)[0]
+    assert inv.extra_context["prompt_fragment"] == ""
+
+
+def test_reframe_reads_fragment_when_exists(tmp_path: Path) -> None:
+    source_dir = tmp_path / "profiles" / "app-idea"
+    frags_dir = source_dir / "prompt-fragments"
+    frags_dir.mkdir(parents=True)
+    (frags_dir / "frame-shifter.md").write_text("custom fragment", encoding="utf-8")
+    profile = _make_profile_with_specialists(source_dir, [])
+    state = _make_state(tmp_path / "workspace")
+    inv = get_phase("1.6").workers_fn(state, profile)[0]
+    assert inv.extra_context["prompt_fragment"] == "custom fragment"
+
+
 # ── explore gate_fn tests ─────────────────────────────────────────────────────
 
 

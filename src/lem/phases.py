@@ -64,7 +64,26 @@ def _disagreement_workers_fn(
 
 
 def _reframe_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:
-    return []
+    fragment_path = profile.source_dir / "prompt-fragments" / "frame-shifter.md"
+    fragment = (
+        fragment_path.read_text(encoding="utf-8") if fragment_path.exists() else ""
+    )
+    drafts = [state.workspace_path / s / "draft-1.md" for s in profile.specialists]
+    return [WorkerInvocation(
+        role_path=profile.source_dir.parent / "process_roles" / "frame-shifter.md",
+        workspace_path=state.workspace_path,
+        output_path=state.workspace_path / "frame-shifter" / "draft-1.md",
+        allowed_read_paths=[
+            state.workspace_path / "idea.md",
+            state.workspace_path / "assumptions.yaml",
+            state.workspace_path / "frame-shifter" / "jtbd.md",
+            *drafts,
+        ],
+        model="opus",
+        max_output_tokens=2500,
+        timeout_s=900,
+        extra_context={"prompt_fragment": fragment},
+    )]
 
 
 def _explore_workers_fn(state: RunState, profile: Profile) -> list[WorkerInvocation]:
