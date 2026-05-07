@@ -4,16 +4,16 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from lem.control import ControlAction, clear_control, read_control
 from lem.failure import breaker
 from lem.failure.ceiling import check_wall_clock
+from lem.hooks import fire_on_complete, fire_on_error, load_hook_config, post_webhook
+from lem.notify import notify
 from lem.phases import PHASES
 from lem.state.cost import aggregate_phase, run_total
 from lem.state.log import append_log
@@ -46,6 +46,7 @@ def run_orchestrator(
 ) -> RunState:
     """Run the full pipeline. Returns the final RunState."""
     cfg = config or OrchestratorConfig()
+    hook_config = load_hook_config(workspace_path)
     state = _initialize_state(workspace_path, profile)
     write_state(state)
     try:
@@ -94,13 +95,17 @@ def run_orchestrator(
         else:
             state.status = "completed"
 
-        if state.status == "completed" and cfg.on_complete:
-            cfg.on_complete(state)
-        elif state.status != "completed" and cfg.on_error:
-            cfg.on_error(state)
+        if state.status == "completed":
+            if cfg.on_complete:
+                cfg.on_complete(state)
+            fire_on_complete(state, hook_config)
+        else:
+            if cfg.on_error:
+                cfg.on_error(state)
+            fire_on_error(state, hook_config)
 
         if cfg.webhook_url:
-            _post_webhook(cfg.webhook_url, state)
+            post_webhook(cfg.webhook_url, state)
 
     except Exception as exc:
         state.status = "failed"
@@ -110,8 +115,10 @@ def run_orchestrator(
                 cfg.on_error(state)
             except Exception:
                 pass
+        fire_on_error(state, hook_config)
 
     write_state(state)
+    notify(state)
     return state
 
 
@@ -210,23 +217,3 @@ def _log(workspace_path: Path, event: str, *, phase: str) -> None:
     )
 
 
-def _post_webhook(url: str, state: RunState) -> None:
-    import json
-    import urllib.request
-
-    payload: dict[str, Any] = {
-        "run_id": state.run_id,
-        "verdict": state.status,
-        "cost": state.cost_so_far,
-        "duration": state.last_event_at - state.started_at,
-        "deliverables_path": str(state.workspace_path / "deliverables"),
-        "status": state.status,
-    }
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=data, headers={"Content-Type": "application/json"}
-    )
-    try:
-        urllib.request.urlopen(req, timeout=10).read()
-    except Exception as exc:
-        print(f"webhook failed: {exc}", file=sys.stderr)
