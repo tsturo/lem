@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+trap '' TERM
+sleep 60
+echo never

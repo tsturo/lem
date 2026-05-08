@@ -1,0 +1,12 @@
+name: stub
+description: Deterministic stub profile for e2e testing (no API calls)
+specialists: [architect, designer, market]
+verdict_options:
+  - Build
+  - Refine before building
+  - Pivot the angle
+  - Don't build
+  - Insufficient information
+default_deliverables:
+  - executive-summary
+flag_gated_deliverables: {}

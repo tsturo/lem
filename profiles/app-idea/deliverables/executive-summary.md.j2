@@ -1,0 +1,42 @@
+# Executive Summary
+
+{{ idea_one_liner }}
+
+## Assumptions
+
+**User-confirmed:**
+{% for a in assumptions_confirmed %}
+- {{ a.description }}
+{% endfor %}
+
+**Agent-assumed (not confirmed by user):**
+{% for a in assumptions_unconfirmed %}
+- {{ a.description }} — would change verdict if false: {{ a.would_change_verdict_if_false }}
+{% endfor %}
+
+## Summary
+
+{{ summary_body }}
+
+## Verdict
+
+**Recommendation:** {{ recommendation }}
+**Confidence:** {{ confidence }} — {{ confidence_rationale }}
+
+{% if recommendation == "Insufficient information" %}
+**Open questions to answer:**
+{% for q in open_questions %}
+- {{ q }}
+{% endfor %}
+{% endif %}
+
+**Market context:** Saturation: {{ market.saturation }}. Direct competitors: {{ market.direct_competitors | join(", ") }}. Closest analogue: {{ market.closest_analogue }}. Genuine differentiator: {{ market.genuine_differentiator }}.
+
+**Strongest case to build:** {{ strongest_build }}
+
+**Strongest case to abandon:** {{ strongest_abandon }}
+
+**What would change our mind:**
+{% for s in falsifiable_signals %}
+- {{ s }}
+{% endfor %}

@@ -1,0 +1,40 @@
+# Tech Stack
+
+## Runtime and platform
+
+- **Frontend:** {{ frontend }}
+- **Backend:** {{ backend }}
+- **Database:** {{ database }}
+- **Hosting:** {{ hosting }}
+
+## State and data
+
+- **State locus:** {{ state_locus }}
+- **Data entities:** {{ data_entities | join(", ") }}
+- **Auth:** {{ auth }}
+
+## External dependencies
+
+{% for dep in external_dependencies %}
+- **{{ dep.name }}** ({{ dep.purpose }}) — {{ dep.cost_anchor }}
+{% endfor %}
+
+## Why this stack
+
+{{ rationale }}
+
+## What was considered and rejected
+
+{% for alt in rejected_alternatives %}
+- **{{ alt.name }}:** {{ alt.reason }}
+{% endfor %}
+
+## Cost anchor
+
+Estimated infrastructure cost at MVP scale ({{ mvp_user_estimate }} users): {{ cost_estimate }}
+
+## Risks specific to this stack
+
+{% for risk in stack_risks %}
+- {{ risk }}
+{% endfor %}

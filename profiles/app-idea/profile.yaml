@@ -1,0 +1,21 @@
+name: app-idea
+description: Refines an app or feature idea into an investor-grade brief
+specialists: [architect, designer, market]
+verdict_options:
+  - Build
+  - Refine before building
+  - Pivot the angle
+  - Don't build
+  - Insufficient information
+default_deliverables:
+  - executive-summary
+  - mvp-plan
+  - risks-and-rejected-paths
+flag_gated_deliverables:
+  --with-pitch: investor-onepager
+  --with-roadmap: roadmap
+  --with-techstack: tech-stack
+branching_policy:
+  architect: yes
+  designer: conditional
+  market: yes

@@ -1,0 +1,33 @@
+# Risks and Rejected Paths
+
+## Top 5 risks
+
+{% for risk in top_risks %}
+### {{ loop.index }}. {{ risk.title }}
+
+**Severity:** {{ risk.severity }}
+**Likelihood:** {{ risk.likelihood }}
+**Trigger:** {{ risk.trigger }}
+
+{{ risk.description }}
+
+**Mitigation:** {{ risk.mitigation }}
+{% endfor %}
+
+## Paths considered and rejected
+
+{% for path in rejected_paths %}
+### {{ path.name }}
+**What it was:** {{ path.description }}
+**Why we rejected it:** {{ path.reason }}
+**What it would have given us:** {{ path.upside }}
+{% endfor %}
+
+## Reframings considered
+
+{% for reframing in reframings %}
+### {{ reframing.shape }}
+**The alternative shape:** {{ reframing.description }}
+**Why we kept the original frame:** {{ reframing.why_rejected }}
+**Conditions under which we would shift:** {{ reframing.shift_conditions }}
+{% endfor %}

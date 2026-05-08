@@ -1,0 +1,35 @@
+# Roadmap
+
+## Now ({{ now["timeframe"] }})
+**Goal:** {{ now["goal"] }}
+**Deliverable:** {{ now["deliverable"] }}
+{% for item in now["items"] %}
+- {{ item }}
+{% endfor %}
+
+## Next ({{ next["timeframe"] }})
+**Goal:** {{ next["goal"] }}
+**Deliverable:** {{ next["deliverable"] }}
+{% for item in next["items"] %}
+- {{ item }}
+{% endfor %}
+
+## Later ({{ later["timeframe"] }})
+**Goal:** {{ later["goal"] }}
+{% for item in later["items"] %}
+- {{ item }}
+{% endfor %}
+
+## Explicitly not on the roadmap
+
+{% for item in not_on_roadmap %}
+- {{ item }}
+{% endfor %}
+
+## Decision points
+
+These are moments when the roadmap should be re-evaluated based on real signal:
+
+{% for d in decision_points %}
+- **{{ d.trigger }}** — re-evaluate: {{ d.what_to_reconsider }}
+{% endfor %}
