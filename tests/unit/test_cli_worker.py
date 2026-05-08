@@ -340,6 +340,95 @@ def test_extra_context_appears_in_prompt(
 # ---------------------------------------------------------------------------
 
 
+def test_strip_outer_code_fence_removes_markdown_wrapper() -> None:
+    """Regression: pruner-style output wrapped in ```markdown fence breaks parser."""
+    fenced = (
+        "```markdown\n"
+        "---\n"
+        "domain: architect\n"
+        "survivor: a\n"
+        "---\n\n"
+        "## Decision\n"
+        "Option A.\n"
+        "```\n"
+    )
+    out = cli_worker._strip_outer_code_fence(fenced)
+    assert out.startswith("---\n")
+    assert "domain: architect" in out
+    assert "```" not in out
+
+
+def test_strip_outer_code_fence_handles_plain_fence() -> None:
+    fenced = "```\nhello\nworld\n```\n"
+    out = cli_worker._strip_outer_code_fence(fenced)
+    assert out == "hello\nworld\n"
+
+
+def test_strip_outer_code_fence_leaves_unfenced_text_alone() -> None:
+    plain = "---\ndomain: x\n---\n## Body\nfoo\n"
+    assert cli_worker._strip_outer_code_fence(plain) == plain
+
+
+def test_strip_outer_code_fence_leaves_inline_fences_alone() -> None:
+    """A fence in the middle of content (not wrapping the whole response) must not strip."""
+    text = "Some prose.\n```python\ninline = 1\n```\nMore prose.\n"
+    assert cli_worker._strip_outer_code_fence(text) == text
+
+
+def test_fenced_response_written_unfenced_to_output_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end: a stub claude that returns fenced markdown should produce
+    an unfenced output file that the schema parser can read."""
+    fenced_stub = tmp_path / "claude_fenced"
+    fenced_stub.write_text(
+        '#!/usr/bin/env bash\n'
+        'cat <<\'EOF\'\n'
+        '{"type":"result","subtype":"success","is_error":false,'
+        '"result":"```markdown\\n---\\ndomain: architect\\n---\\n## Decision\\nA.\\n```\\n",'
+        '"stop_reason":"end_turn","session_id":"x","total_cost_usd":0.0,'
+        '"duration_ms":1,"duration_api_ms":1,'
+        '"usage":{"input_tokens":0,"output_tokens":0,'
+        '"cache_creation_input_tokens":0,"cache_read_input_tokens":0},'
+        '"permission_denials":[],"terminal_reason":"completed"}\n'
+        'EOF\n',
+        encoding="utf-8",
+    )
+    fenced_stub.chmod(0o755)
+    monkeypatch.setenv("LEM_CLAUDE_BIN", str(fenced_stub))
+
+    inv = make_invocation(tmp_path, output_path=tmp_path / "decision.md")
+    cli_worker.invoke(inv, system_prompt="sys", allowed_tools=[])
+
+    written = inv.output_path.read_text(encoding="utf-8")
+    assert written.startswith("---\n")
+    assert "```" not in written
+
+
+def test_user_prompt_forbids_write_tool_and_omits_output_path(
+    tmp_path: Path,
+) -> None:
+    """Regression: the user prompt must not instruct the model to 'write to <path>'.
+
+    Earlier phrasing — "Write your output to /abs/path/to/file" — caused models with
+    `tools: []` to apologize and return their content wrapped in a fenced code block
+    prefixed by a meta-message ('I cannot write to that file...'), breaking the
+    schema validator. The prompt must (a) tell the model to return the output as
+    its response text, (b) explicitly forbid file-writing tools, and (c) not leak
+    the absolute output path into the prompt.
+    """
+    inv = make_invocation(tmp_path, max_output_tokens=512)
+    prompt = cli_worker._build_user_prompt(inv)
+
+    assert str(inv.output_path) not in prompt
+    assert "Write your output to" not in prompt
+    lower = prompt.lower()
+    assert "no write" in lower or "do not use" in lower or "do not call" in lower
+    assert "write" in lower
+    assert "code fence" in lower or "no fence" in lower
+    assert "512" in prompt
+
+
 def test_cwd_set_to_workspace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

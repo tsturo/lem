@@ -147,7 +147,11 @@ def _build_user_prompt(inv: WorkerInvocation) -> str:
         parts.append("---\n\n(end of context — your task instructions follow)\n\n")
 
     parts.append(
-        f"Write your output to {inv.output_path}. "
+        "Respond with your final output as your message text — exactly the "
+        "file contents, with no surrounding code fences (no leading ```...``` "
+        "wrapper), no commentary before or after, and no Write/Edit/file-writing "
+        "tools. The first line of your response must be the first line of the "
+        "file. lem will save your response to disk verbatim. "
         f"Limit your response to {inv.max_output_tokens} tokens."
     )
 
@@ -183,6 +187,7 @@ def _parse_result(
         stop_reason = "end_turn"
 
     result_text: str = envelope.get("result") or ""
+    result_text = _strip_outer_code_fence(result_text)
 
     if result_text:
         _write_atomic(inv.output_path, result_text)
@@ -225,6 +230,26 @@ def _stub_invoke(inv: WorkerInvocation, stub_dir: Path | None) -> WorkerResult:
         schema_valid=False,
         schema_errors=[],
     )
+
+
+def _strip_outer_code_fence(text: str) -> str:
+    """If the whole response is wrapped in a single ```...``` fence, unwrap it.
+
+    Models sometimes return structured markdown wrapped in a code fence
+    (`` ```markdown\\n<content>\\n``` ``). When that happens line 1 is the
+    fence, not the file's first real line, and the schema parser rejects the
+    output. Strip the fence iff the response opens with ``` on its first
+    non-empty line and the matching closing ``` appears at end of text.
+    """
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return text
+
+    lines = stripped.splitlines()
+    if len(lines) < 2 or not lines[-1].startswith("```"):
+        return text
+
+    return "\n".join(lines[1:-1]) + "\n"
 
 
 def _write_atomic(output_path: Path, text: str) -> None:

@@ -8,6 +8,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal, NamedTuple
 
 import jinja2
 
@@ -38,6 +39,21 @@ from lem.types import (
 from lem.workers.dispatch import dispatch_worker
 
 
+class ProgressEvent(NamedTuple):
+    """Lightweight progress signal for live status output (`lem refine --attach`).
+
+    Emitted at phase boundaries. Worker-level events stay in meta/log.jsonl;
+    this stream is only the phase-grain summary intended for terminal display.
+    """
+
+    kind: Literal["phase_start", "phase_done", "phase_skipped"]
+    phase_id: str
+    roles: tuple[str, ...] = ()
+    duration_s: float = 0.0
+    cost_usd: float = 0.0
+    success: bool = True
+
+
 @dataclass(frozen=True)
 class OrchestratorConfig:
     max_concurrent: int = 4
@@ -49,6 +65,7 @@ class OrchestratorConfig:
     max_wall_clock_s: float = 4 * 60 * 60
     on_complete: Callable[[RunState], None] | None = None
     on_error: Callable[[RunState], None] | None = None
+    progress_cb: Callable[[ProgressEvent], None] | None = None
     webhook_url: str | None = None
     # Flags forwarded to the deliverable render pass to enable flag-gated
     # deliverables. Members map to keys in profile.flag_gated_deliverables
@@ -91,11 +108,17 @@ def run_orchestrator(
             if phase.gate_fn and not phase.gate_fn(state):
                 state.phase = phase.id
                 _log(workspace_path, "phase_skipped", phase=phase.id)
+                _emit_progress(
+                    cfg, ProgressEvent(kind="phase_skipped", phase_id=phase.id)
+                )
                 continue
 
             invocations = phase.workers_fn(state, profile)
             if not invocations:
                 state.phase = phase.id
+                _emit_progress(
+                    cfg, ProgressEvent(kind="phase_skipped", phase_id=phase.id)
+                )
                 continue
 
             if cfg.max_cost is not None:
@@ -120,6 +143,14 @@ def run_orchestrator(
                     )
                     break
 
+            phase_roles = tuple(inv.role_path.stem for inv in invocations)
+            _emit_progress(
+                cfg,
+                ProgressEvent(kind="phase_start", phase_id=phase.id, roles=phase_roles),
+            )
+            phase_t0 = time.time()
+            cost_before = state.cost_so_far
+
             results = _dispatch_phase(invocations, profile, phase, cfg, workspace_path)
 
             aggregate_phase(workspace_path, phase.id, state.run_id)
@@ -132,21 +163,34 @@ def run_orchestrator(
                 # Render after the verdict-check so meta/synthesis.md is the
                 # authoritative source for both the recommendation field and
                 # the rendered deliverables.
-                render_deliverables(
-                    workspace_path,
-                    profile,
-                    requested_flags=set(cfg.requested_flags),
-                )
+                synth_path = workspace_path / "meta" / "synthesis.md"
+                if synth_path.exists():
+                    render_deliverables(
+                        workspace_path,
+                        profile,
+                        requested_flags=set(cfg.requested_flags),
+                    )
                 _ = downgraded
 
             verdict = breaker.evaluate_phase(phase.id, results)
+            state.cost_so_far = run_total(workspace_path)
+            _emit_progress(
+                cfg,
+                ProgressEvent(
+                    kind="phase_done",
+                    phase_id=phase.id,
+                    roles=phase_roles,
+                    duration_s=time.time() - phase_t0,
+                    cost_usd=state.cost_so_far - cost_before,
+                    success=not verdict.should_abort,
+                ),
+            )
             if verdict.should_abort:
                 state.status = "failed"
                 state.error = verdict.reason
                 break
 
             state.phase = phase.id
-            state.cost_so_far = run_total(workspace_path)
             state.last_event_at = time.time()
             write_state(state)
         else:
@@ -303,6 +347,15 @@ def _resolve_schema(
     role_name = inv.role_path.stem
     role = profile.roles.get(role_name) or profile.process_roles.get(role_name)
     return role.output_schema if role else None
+
+
+def _emit_progress(cfg: OrchestratorConfig, event: ProgressEvent) -> None:
+    if cfg.progress_cb is None:
+        return
+    try:
+        cfg.progress_cb(event)
+    except Exception:
+        pass
 
 
 def _log(workspace_path: Path, event: str, *, phase: str) -> None:

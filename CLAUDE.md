@@ -37,6 +37,7 @@ Multi-agent CLI that refines a one-line app/feature idea into investor-grade mar
 ```
 src/lem/
   cli.py                — typer entry, registers commands
+  auth.py               — claude CLI presence + auth check
   orchestrator.py       — main run loop, phase iteration, dispatch
   phases.py             — declarative PHASES: list[PhaseSpec]
   types.py              — frozen dataclasses (strict pyright)
@@ -88,6 +89,7 @@ docs/
 ```bash
 pip install -e ".[dev]"        # install (use a venv)
 pytest -q                      # run all tests
+pytest tests/unit/test_orchestrator.py::test_name -xvs   # single test
 ruff check src/                # lint
 pyright src/                   # type check
 

@@ -89,6 +89,10 @@ def synthesis_path(workspace_path: Path) -> Path:
     return workspace_path / "meta" / "synthesis.md"
 
 
+class SynthesisIntegrityError(Exception):
+    """Synthesis output is missing or unparseable — deliverables cannot render."""
+
+
 def load_synthesis_frontmatter(workspace_path: Path) -> dict[str, Any]:
     path = synthesis_path(workspace_path)
     if not path.exists():
@@ -98,6 +102,33 @@ def load_synthesis_frontmatter(workspace_path: Path) -> dict[str, Any]:
     except Exception:
         return {}
     return dict(doc.frontmatter)
+
+
+def _assert_synthesis_loadable(workspace_path: Path) -> None:
+    """Raise SynthesisIntegrityError with a useful message if synthesis is broken.
+
+    A silent empty-frontmatter outcome causes deliverables to render as empty
+    Jinja templates and the run to claim 'completed' — actively misleading.
+    Surface the failure so the orchestrator can mark the run as failed instead.
+    """
+    path = synthesis_path(workspace_path)
+    if not path.exists():
+        raise SynthesisIntegrityError(
+            f"synthesizer produced no output at {path}"
+        )
+    try:
+        doc = parse_file(path)
+    except Exception as exc:
+        raise SynthesisIntegrityError(
+            f"synthesis.md is malformed and cannot be parsed: {exc}. "
+            f"This usually means the synthesizer forgot to close the "
+            f"frontmatter with a `---` fence before the body."
+        ) from exc
+    if not doc.frontmatter:
+        raise SynthesisIntegrityError(
+            f"synthesis.md parsed with empty frontmatter at {path}. "
+            f"Render layer cannot produce any deliverable content."
+        )
 
 
 def required_keys_for_deliverables(deliverables: list[str]) -> set[str]:
@@ -150,6 +181,7 @@ def render_deliverables(
     if requested_flags is None:
         requested_flags = set()
 
+    _assert_synthesis_loadable(workspace_path)
     context = load_synthesis_frontmatter(workspace_path)
     deliverable_names = list(profile.default_deliverables) + _flag_gated_requested(
         profile.flag_gated_deliverables, requested_flags

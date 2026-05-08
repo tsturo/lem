@@ -44,18 +44,31 @@ One paragraph naming the user's apparent frame and the assumptions baked into it
 
 ### `## Alternative shapes`
 
-For each entry in `alternative_shapes`, give 3–6 sentences:
+**Format: one top-level `- ` bullet per entry in `alternative_shapes`, in the same order. No `### ` subheadings.** Each bullet is 3–6 sentences covering, in this order:
+
 1. The shape (one sentence).
 2. The mechanism — how the user actually gets value in this shape.
 3. What this shape is *better at* than the original.
 4. What it is *worse at* — be honest, otherwise you're just promoting alternatives.
 5. The user-segment shift, if any, that comes with this shape.
 
+Example:
+```
+- **CLI + TUI tool.** A single binary, `agentctl`, with subcommands for create/list/run/logs. The mechanism is launchd plus a SQLite registry the binary owns. Better at: zero startup cost, scriptable, ~5MB binary instead of 150MB Electron. Worse at: no rich charts, fewer non-technical onlookers can use it. Audience shift: same single user, met in his actual workflow.
+- **Content product — template repo + playbook.** ...
+```
+
 Aim for at least one shape that genuinely threatens the user's frame (a serious "this should not be software at all" candidate if applicable).
 
 ### `## Heretical takes`
 
-For each take in `heretical_takes`, 2–4 sentences explaining the claim and the strongest evidence for it. These are not opinions — they are claims to be tested. Each take should give the synthesizer a real handle: "if this take is correct, the verdict shifts to X."
+**Format: one top-level `- ` bullet per entry in `heretical_takes`, in the same order. No `### ` subheadings.** Each bullet is 2–4 sentences explaining the claim and the strongest evidence for it. These are not opinions — they are claims to be tested. Each take should give the synthesizer a real handle: "if this take is correct, the verdict shifts to X."
+
+Example:
+```
+- **The user doesn't want this — he wants to talk about wanting it.** The doc itself ends with "do nothing this week." Strongest evidence: the brainstorm IS the value already extracted. If correct, the verdict shifts to "archive the doc, redirect energy to the higher-priority project."
+- **The right MVP is a template repo, not software.** ...
+```
 
 ## Discipline
 

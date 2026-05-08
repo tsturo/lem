@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from lem.schema.parser import parse_file
+from lem.schema.parser import FrontmatterError, parse_file
 from lem.schema.validator import validate
 from lem.types import WorkerInvocation, WorkerResult
 from lem.workers import cli_worker
@@ -93,7 +93,12 @@ def _validate_output(
 ) -> list[str]:
     if not result.output_path.exists():
         return ["output file not written"]
-    doc = parse_file(result.output_path)
+    try:
+        doc = parse_file(result.output_path)
+    except FrontmatterError as exc:
+        return [f"frontmatter parse error: {exc}"]
+    except ValueError as exc:
+        return [f"could not read output file: {exc}"]
     validation = validate(doc, output_schema)
     return list(validation.errors)
 

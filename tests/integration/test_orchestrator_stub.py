@@ -727,3 +727,81 @@ def test_setup_fn_runs_before_gate_fn_skips(
     state = run_orchestrator(tmp_path, stub_profile)
     assert state.status == "completed"
     assert setup_calls == ["called"]
+
+
+# ---------------------------------------------------------------------------
+# Progress callback (for `lem refine --attach` live status output)
+# ---------------------------------------------------------------------------
+
+
+def test_progress_cb_emits_phase_start_and_done(
+    tmp_path: Path, stub_profile: Profile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "lem.orchestrator.dispatch_worker",
+        lambda inv, sp, tools, output_schema=None: _ok_result(inv),
+    )
+    events: list[Any] = []
+    cfg = OrchestratorConfig(progress_cb=lambda e: events.append(e))
+
+    run_orchestrator(tmp_path, stub_profile, cfg)
+
+    kinds = [e.kind for e in events]
+    assert "phase_start" in kinds
+    assert "phase_done" in kinds
+    starts = [e for e in events if e.kind == "phase_start"]
+    dones = [e for e in events if e.kind == "phase_done"]
+    assert len(starts) == len(dones)
+    for e in dones:
+        assert e.duration_s >= 0.0
+        assert e.success is True
+
+
+def test_progress_cb_carries_phase_id_and_roles(
+    tmp_path: Path, stub_profile: Profile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "lem.orchestrator.dispatch_worker",
+        lambda inv, sp, tools, output_schema=None: _ok_result(inv),
+    )
+    events: list[Any] = []
+    cfg = OrchestratorConfig(progress_cb=lambda e: events.append(e))
+
+    run_orchestrator(tmp_path, stub_profile, cfg)
+
+    starts = [e for e in events if e.kind == "phase_start"]
+    assert all(isinstance(e.phase_id, str) and e.phase_id for e in starts)
+    assert any(e.roles for e in starts)
+
+
+def test_progress_cb_default_none_no_crash(
+    tmp_path: Path, stub_profile: Profile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "lem.orchestrator.dispatch_worker",
+        lambda inv, sp, tools, output_schema=None: _ok_result(inv),
+    )
+    state = run_orchestrator(tmp_path, stub_profile)
+    assert state.status == "completed"
+
+
+def test_progress_cb_marks_phase_done_failed_when_breaker_aborts(
+    tmp_path: Path, stub_profile: Profile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the circuit breaker aborts a phase, phase_done should report success=False."""
+    _patch_all_phases_empty(monkeypatch)
+    _patch_phase_workers(
+        monkeypatch, "0", lambda s, p: [_make_invocation(tmp_path)]
+    )
+    monkeypatch.setattr(
+        "lem.orchestrator.dispatch_worker",
+        lambda inv, sp, tools, output_schema=None: _fail_result(inv),
+    )
+    events: list[Any] = []
+    cfg = OrchestratorConfig(progress_cb=lambda e: events.append(e))
+
+    run_orchestrator(tmp_path, stub_profile, cfg)
+
+    dones = [e for e in events if e.kind == "phase_done" and e.phase_id == "0"]
+    assert dones, "expected a phase_done for phase 0"
+    assert dones[-1].success is False

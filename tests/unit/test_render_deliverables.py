@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from lem.render.deliverables import (
@@ -105,7 +106,7 @@ def test_render_flag_gated_only_when_requested(tmp_path: Path) -> None:
 
 
 def test_undefined_keys_render_as_empty(tmp_path: Path) -> None:
-    """ChainableUndefined: missing frontmatter keys render as empty string,
+    """ChainableUndefined: a missing-but-known key renders as empty string,
     not raise — so a partial synthesis still produces *something*."""
     profile_dir = tmp_path / "profile"
     workspace = tmp_path / "ws"
@@ -114,11 +115,49 @@ def test_undefined_keys_render_as_empty(tmp_path: Path) -> None:
     profile = _make_profile(
         source_dir=profile_dir, default=["executive-summary"], flag_gated={}
     )
-    _write_synthesis(workspace, {})
+    # Non-empty frontmatter (real synthesizer output), but the template uses
+    # a key the synthesizer didn't include. Should render as empty, not crash.
+    _write_synthesis(workspace, {"recommendation": "Build"})
     written = render_deliverables(workspace, profile)
     assert len(written) == 1
     text = written[0].read_text(encoding="utf-8")
     assert "before--after" in text
+
+
+def test_render_raises_on_empty_synthesis_frontmatter(tmp_path: Path) -> None:
+    """Regression for 2026-05-08 silent-empty-deliverables bug:
+    if synthesis frontmatter is empty (= parse failure surrogate), render
+    must raise SynthesisIntegrityError, not produce blank deliverables."""
+    from lem.render.deliverables import SynthesisIntegrityError
+    profile_dir = tmp_path / "profile"
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    _write_template(profile_dir, "executive-summary", "x")
+    profile = _make_profile(
+        source_dir=profile_dir, default=["executive-summary"], flag_gated={}
+    )
+    _write_synthesis(workspace, {})
+    with pytest.raises(SynthesisIntegrityError, match="empty frontmatter"):
+        render_deliverables(workspace, profile)
+
+
+def test_render_raises_on_unparseable_synthesis(tmp_path: Path) -> None:
+    """Regression: synthesizer output with opening `---` but no closing fence
+    must surface as SynthesisIntegrityError, not silently render empty."""
+    from lem.render.deliverables import SynthesisIntegrityError
+    profile_dir = tmp_path / "profile"
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "meta").mkdir()
+    (workspace / "meta" / "synthesis.md").write_text(
+        "---\nrecommendation: Build\n\n## Verdict\nbody\n", encoding="utf-8"
+    )
+    _write_template(profile_dir, "executive-summary", "x")
+    profile = _make_profile(
+        source_dir=profile_dir, default=["executive-summary"], flag_gated={}
+    )
+    with pytest.raises(SynthesisIntegrityError, match="malformed"):
+        render_deliverables(workspace, profile)
 
 
 def test_validate_synthesis_frontmatter_missing_keys(tmp_path: Path) -> None:
