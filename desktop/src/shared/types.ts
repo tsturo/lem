@@ -1,3 +1,8 @@
+export interface Settings {
+  theme: 'auto' | 'light' | 'dark'
+  claudePath?: string
+}
+
 export type Verdict = 'build' | 'skip' | 'unsure'
 
 export type RunGroup = 'active' | 'done' | 'archive'
