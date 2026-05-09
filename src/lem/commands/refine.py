@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import sys
+import time
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -60,6 +63,11 @@ def refine(
     verbose: bool = typer.Option(
         False, "--verbose", help="Operator-style logs (timestamps, phase IDs, costs)."
     ),
+    json_events: bool = typer.Option(
+        False,
+        "--json-events",
+        help="Write one JSON line per ProgressEvent to stdout. Implies --attach.",
+    ),
     dry_run: bool = typer.Option(False, "--dry-run"),
     open_in: Optional[str] = typer.Option(None, "--open"),
 ) -> None:
@@ -71,6 +79,9 @@ def refine(
         name=name, workspace_arg=workspace, run_id=run_id
     )
     workspace_path.mkdir(parents=True, exist_ok=True)
+
+    if json_events:
+        attach = True
 
     if dry_run:
         _print_dry_run_estimate(profile_obj, depth)
@@ -94,7 +105,11 @@ def refine(
         requested_flags.add("--with-techstack")
 
     printer = _make_printer(
-        attach=attach, verbose=verbose, idea=idea, ws=workspace_path
+        attach=attach,
+        verbose=verbose,
+        json_events=json_events,
+        idea=idea,
+        ws=workspace_path,
     )
     config = OrchestratorConfig(
         max_concurrent=max_concurrent,
@@ -169,10 +184,12 @@ _PHASE_FAILURE_BLURBS: dict[str, str] = {
 
 
 def _make_printer(
-    *, attach: bool, verbose: bool, idea: str, ws: Path
+    *, attach: bool, verbose: bool, json_events: bool, idea: str, ws: Path
 ) -> "_Printer | None":
     if not attach:
         return None
+    if json_events:
+        return _JsonEventPrinter()
     if verbose:
         return _VerbosePrinter()
     return _UserPrinter(idea=idea, ws=ws)
@@ -206,6 +223,23 @@ class _VerbosePrinter(_Printer):
             f"Run complete: {getattr(state, 'run_id', '?')} "
             f"(status={getattr(state, 'status', '?')})"
         )
+
+
+class _JsonEventPrinter(_Printer):
+    """Writes one JSON line per ProgressEvent to stdout for structured IPC."""
+
+    def on_event(self, event: ProgressEvent) -> None:
+        record = {
+            "kind": event.kind,
+            "phase_id": event.phase_id,
+            "roles": list(event.roles),
+            "duration_s": event.duration_s,
+            "cost_usd": event.cost_usd,
+            "success": event.success,
+            "timestamp": time.time(),
+        }
+        sys.stdout.write(json.dumps(record) + "\n")
+        sys.stdout.flush()
 
 
 class _UserPrinter(_Printer):
