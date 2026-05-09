@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell, ipcMain } from 'electron'
 import { join } from 'path'
 import { registerAllHandlers } from './ipc-register'
+import { registerClaudeHandlers } from './claude-ipc'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -37,6 +38,7 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(() => {
   registerAllHandlers(ipcMain)
+  registerClaudeHandlers(ipcMain)
   createWindow()
 
   app.on('activate', () => {
