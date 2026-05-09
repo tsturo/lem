@@ -36,3 +36,11 @@ env/
 .env.local
 
 .superpowers/
+
+# Desktop (Electron)
+desktop/node_modules/
+desktop/dist/
+desktop/out/
+desktop/test-results/
+desktop/playwright-report/
+desktop/.vite/
