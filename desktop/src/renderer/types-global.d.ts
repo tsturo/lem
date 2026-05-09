@@ -1,4 +1,4 @@
-import type { Settings } from '../shared/types'
+import type { Settings, LibraryItem } from '../shared/types'
 import type { LogLine, ProgressEvent } from '../types/lem-events'
 
 declare global {
@@ -15,6 +15,9 @@ declare global {
       }
       shell: {
         openExternal(url: string): Promise<void>
+      }
+      library: {
+        list(): Promise<LibraryItem[]>
       }
       run: {
         start(args: { idea: string; stub?: boolean; replaySpeed?: number }): Promise<string>

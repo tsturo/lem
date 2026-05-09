@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc-channels'
-import type { Settings } from '../shared/types'
+import type { Settings, LibraryItem } from '../shared/types'
 
 contextBridge.exposeInMainWorld('lem', {
   settings: {
@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('lem', {
   },
   shell: {
     openExternal: (url: string): Promise<void> => ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url),
+  },
+  library: {
+    list: (): Promise<LibraryItem[]> => ipcRenderer.invoke(IPC.LIBRARY_LIST),
   },
   run: {
     start(args: { idea: string; stub?: boolean; replaySpeed?: number }): Promise<string> {
