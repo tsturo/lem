@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 import type { Settings, LibraryItem } from '../shared/types'
+import type { BriefData } from '../main/workspace-reader'
 
 contextBridge.exposeInMainWorld('lem', {
   settings: {
@@ -36,5 +37,9 @@ contextBridge.exposeInMainWorld('lem', {
       ipcRenderer.on(IPC.RUN_LOG, listener)
       return () => ipcRenderer.removeListener(IPC.RUN_LOG, listener)
     },
+  },
+  workspace: {
+    readBrief: (workspacePath: string): Promise<BriefData> =>
+      ipcRenderer.invoke(IPC.WORKSPACE_READ_BRIEF, workspacePath),
   },
 })

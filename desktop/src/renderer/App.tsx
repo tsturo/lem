@@ -1,53 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AppShell } from '@/components/AppShell'
 import { BrandMark } from '@/components/BrandMark'
 import { Sidebar } from '@/components/Sidebar'
 import { Topbar } from '@/components/Topbar'
 import { IntakeInput } from '@/screens/IntakeInput'
 import { IntakeChat } from '@/screens/IntakeChat'
-import type { ChatMessage, RunRow } from '../shared/types'
+import { Theater } from '@/screens/Theater'
+import { Brief } from '@/screens/Brief'
+import type { ChatMessage } from '../shared/types'
+import type { LogLine, ProgressEvent } from '../types/lem-events'
 import { useSettings } from '@/store/settings'
+import { useRuntime } from '@/store/runtime'
+import { useLibrary } from '@/store/library'
 
-type ScreenKind = 'empty' | 'intake-input' | 'intake-chat' | 'placeholder'
-
-const MOCK_LIBRARY: RunRow[] = [
-  {
-    runId: 'run-1',
-    idea: 'Dog walking app',
-    verdict: 'build',
-    status: 'completed',
-    group: 'done',
-    createdAt: '2026-05-08T10:00:00Z',
-    updatedAt: '2026-05-08T14:30:00Z',
-  },
-  {
-    runId: 'run-2',
-    idea: 'Parent calendar',
-    verdict: 'unsure',
-    status: 'completed',
-    group: 'done',
-    createdAt: '2026-05-07T09:00:00Z',
-    updatedAt: '2026-05-07T13:45:00Z',
-  },
-  {
-    runId: 'run-3',
-    idea: 'GitHub Actions AI',
-    verdict: null,
-    status: 'running',
-    group: 'active',
-    createdAt: '2026-05-09T08:00:00Z',
-    updatedAt: '2026-05-09T08:15:00Z',
-  },
-  {
-    runId: 'run-4',
-    idea: 'Tofu pricing tracker',
-    verdict: 'skip',
-    status: 'completed',
-    group: 'done',
-    createdAt: '2026-05-06T11:00:00Z',
-    updatedAt: '2026-05-06T15:20:00Z',
-  },
-]
+type ScreenKind = 'empty' | 'intake-input' | 'intake-chat' | 'theater' | 'brief' | 'error'
 
 const MOCK_QUESTIONS = [
   "Who's the primary user — is it you, a small team, or a broader consumer audience?",
@@ -92,13 +58,13 @@ function ConfirmationCard({ idea, onStart }: ConfirmationCardProps) {
 
       <h2
         style={{
-          margin:      0,
-          fontSize:    28,
-          fontWeight:  700,
-          fontFamily:  'var(--t-font)',
+          margin:        0,
+          fontSize:      28,
+          fontWeight:    700,
+          fontFamily:    'var(--t-font)',
           letterSpacing: '-0.02em',
-          lineHeight:  1.25,
-          color:       'var(--t-text)',
+          lineHeight:    1.25,
+          color:         'var(--t-text)',
         }}
       >
         Ready to analyze?
@@ -144,20 +110,20 @@ function ConfirmationCard({ idea, onStart }: ConfirmationCardProps) {
           data-action="start-analysis"
           onClick={onStart}
           style={{
-            display:        'inline-flex',
-            alignItems:     'center',
-            gap:            6,
-            padding:        '12px 24px',
-            background:     'linear-gradient(135deg, #6c5ce7, #00cec9)',
-            color:          '#fff',
-            border:         'none',
-            borderRadius:   12,
-            fontSize:       14,
-            fontFamily:     'var(--t-font)',
-            fontWeight:     600,
-            cursor:         'pointer',
-            boxShadow:      'var(--t-shadow-cta)',
-            transition:     'transform 0.12s, box-shadow 0.12s',
+            display:      'inline-flex',
+            alignItems:   'center',
+            gap:          6,
+            padding:      '12px 24px',
+            background:   'linear-gradient(135deg, #6c5ce7, #00cec9)',
+            color:        '#fff',
+            border:       'none',
+            borderRadius: 12,
+            fontSize:     14,
+            fontFamily:   'var(--t-font)',
+            fontWeight:   600,
+            cursor:       'pointer',
+            boxShadow:    'var(--t-shadow-cta)',
+            transition:   'transform 0.12s, box-shadow 0.12s',
           }}
           onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)' }}
           onMouseLeave={e => { e.currentTarget.style.transform = '' }}
@@ -169,18 +135,113 @@ function ConfirmationCard({ idea, onStart }: ConfirmationCardProps) {
   )
 }
 
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div
+      data-screen="error"
+      style={{
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'center',
+        height:         '100%',
+      }}
+    >
+      <div
+        style={{
+          maxWidth:     480,
+          padding:      '32px',
+          background:   'rgba(255,0,80,0.06)',
+          border:       '1px solid rgba(255,0,80,0.20)',
+          borderRadius: 14,
+          fontFamily:   'var(--t-font)',
+          color:        'var(--t-text)',
+          textAlign:    'center',
+        }}
+      >
+        <div style={{ fontSize: 28, marginBottom: 12 }}>⚠️</div>
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>{message}</p>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const claudePath = useSettings(s => s.claudePath)
-  const load       = useSettings(s => s.load)
+  const loadSettings = useSettings(s => s.load)
 
-  const [screen,       setScreen]       = useState<ScreenKind>('intake-input')
-  const [activeId,     setActiveId]     = useState<string | undefined>()
-  const [ideaText,     setIdeaText]     = useState('')
-  const [messages,     setMessages]     = useState<ChatMessage[]>([])
-  const [questionIdx,  setQuestionIdx]  = useState(0)
-  const [allAnswered,  setAllAnswered]  = useState(false)
+  const initRun       = useRuntime(s => s.initRun)
+  const onPhaseStart  = useRuntime(s => s.onPhaseStart)
+  const onPhaseDone   = useRuntime(s => s.onPhaseDone)
+  const onPhaseSkipped = useRuntime(s => s.onPhaseSkipped)
+  const onRoleDone    = useRuntime(s => s.onRoleDone)
+  const failRun       = useRuntime(s => s.failRun)
+  const runs          = useRuntime(s => s.runs)
+  const activeRunId   = useRuntime(s => s.activeRunId)
 
-  useEffect(() => { load() }, [load])
+  const loadLibrary  = useLibrary(s => s.load)
+  const selectRun    = useLibrary(s => s.select)
+  const libraryItems = useLibrary(s => s.items)
+
+  const [screen,      setScreen]      = useState<ScreenKind>('intake-input')
+  const [activeId,    setActiveId]    = useState<string | undefined>()
+  const [ideaText,    setIdeaText]    = useState('')
+  const [messages,    setMessages]    = useState<ChatMessage[]>([])
+  const [questionIdx, setQuestionIdx] = useState(0)
+  const [allAnswered, setAllAnswered] = useState(false)
+  const [errorMsg,    setErrorMsg]    = useState('')
+
+  const activeRunIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    loadSettings()
+    loadLibrary()
+  }, [loadSettings, loadLibrary])
+
+  useEffect(() => {
+    activeRunIdRef.current = activeRunId
+  }, [activeRunId])
+
+  useEffect(() => {
+    const off = window.lem.run.onEvent((rawEvent) => {
+      const runId = activeRunIdRef.current
+      if (!runId) return
+      const ev = rawEvent as { kind: string } & Record<string, unknown>
+
+      if (ev.kind === 'phase_start' || ev.kind === 'phase_done' || ev.kind === 'phase_skipped') {
+        const pev = rawEvent as ProgressEvent
+        if (ev.kind === 'phase_start') {
+          onPhaseStart(runId, pev)
+        } else if (ev.kind === 'phase_done') {
+          onPhaseDone(runId, pev)
+          if (pev.phase_id === '4') {
+            loadLibrary()
+            setScreen('empty')
+          }
+        } else {
+          onPhaseSkipped(runId, pev)
+        }
+      } else if (ev.kind === 'run_exit') {
+        const run = useRuntime.getState().runs[runId]
+        if (run && run.status !== 'completed') {
+          failRun(runId)
+          setErrorMsg('Analysis stopped unexpectedly. Check logs for details.')
+          setScreen('error')
+        }
+      }
+    })
+    return off
+  }, [onPhaseStart, onPhaseDone, onPhaseSkipped, failRun, loadLibrary])
+
+  useEffect(() => {
+    const off = window.lem.run.onLog((logLine: LogLine) => {
+      const runId = activeRunIdRef.current
+      if (!runId) return
+      if (logLine.event === 'worker_done' && logLine.phase_id && logLine.role) {
+        onRoleDone(runId, logLine.phase_id, logLine.role, logLine.message ?? '')
+      }
+    })
+    return off
+  }, [onRoleDone])
 
   if (claudePath === undefined) {
     return (
@@ -195,6 +256,12 @@ export default function App() {
         <BrandMark size={48} className="animate-t-pulse" />
       </div>
     )
+  }
+
+  async function handleStartAnalysis() {
+    const runId = await window.lem.run.start({ idea: ideaText })
+    initRun(runId)
+    setScreen('theater')
   }
 
   function handleSubmitIdea(idea: string) {
@@ -227,16 +294,40 @@ export default function App() {
   }
 
   function handleSelect(runId: string) {
+    selectRun(runId)
     setActiveId(runId)
-    setScreen('placeholder')
+    const runtimeRun = runs[runId]
+    if (runtimeRun && runtimeRun.status === 'running') {
+      setScreen('theater')
+      return
+    }
+    const item = libraryItems.find(r => r.runId === runId)
+    if (item?.status === 'completed') {
+      setScreen('brief')
+    } else if (item?.status === 'running') {
+      setScreen('theater')
+    } else {
+      setScreen('empty')
+    }
+  }
+
+  function handleStop() {
+    if (activeRunId) {
+      window.lem.run.cancel(activeRunId)
+    }
   }
 
   const topbarTitle = (() => {
     switch (screen) {
-      case 'intake-input':  return 'New Idea'
-      case 'intake-chat':   return ideaText || 'Refining…'
-      case 'placeholder':   return MOCK_LIBRARY.find(r => r.runId === activeId)?.idea ?? 'Run'
-      default:              return 'lem'
+      case 'intake-input': return 'New Idea'
+      case 'intake-chat':  return ideaText || 'Refining…'
+      case 'theater':      return ideaText || 'Analyzing…'
+      case 'brief': {
+        const item = libraryItems.find(r => r.runId === activeId)
+        return item?.idea ?? 'Analysis'
+      }
+      case 'error':        return 'Error'
+      default:             return 'lem'
     }
   })()
 
@@ -250,7 +341,7 @@ export default function App() {
           return (
             <ConfirmationCard
               idea={ideaText}
-              onStart={() => { /* analysis launch not yet wired */ }}
+              onStart={handleStartAnalysis}
             />
           )
         }
@@ -264,8 +355,45 @@ export default function App() {
           />
         )
 
-      case 'placeholder': {
-        const item = MOCK_LIBRARY.find(r => r.runId === activeId)
+      case 'theater': {
+        const runId = activeRunId ?? activeId
+        const run   = runId ? runs[runId] : undefined
+        if (!run) return null
+        return (
+          <Theater
+            run={run}
+            idea={ideaText}
+            onStop={handleStop}
+          />
+        )
+      }
+
+      case 'error':
+        return <ErrorBanner message={errorMsg} />
+
+      case 'brief': {
+        const item = libraryItems.find(r => r.runId === activeId)
+        if (!item) return null
+        return (
+          <Brief
+            idea={item.idea}
+            verdict={item.verdict ?? 'unsure'}
+            tabs={[
+              { id: 'exec', label: 'Executive summary', content: '' },
+              { id: 'mvp', label: 'MVP plan', content: '' },
+              { id: 'risks', label: 'Risks & rejected', content: '' },
+            ]}
+            calloutStats={{ recommendation: item.verdict ?? 'unsure', confidence: '—', firstMilestone: '—' }}
+            signalPills={[]}
+            meta={{ version: '0.1.0', phases: 11, specialists: 3, date: item.createdAt.split('T')[0] ?? '—' }}
+            onRefineAgain={handleNewIdea}
+          />
+        )
+      }
+
+      case 'empty':
+      default: {
+        const item = libraryItems.find(r => r.runId === activeId)
         return (
           <div
             style={{
@@ -278,24 +406,34 @@ export default function App() {
               color:          'var(--t-text-3)',
             }}
           >
-            Run view coming soon — {item?.idea ?? ''}
+            {item ? `${item.idea} — completed` : 'Select a run or start a new idea'}
           </div>
         )
       }
-
-      default:
-        return null
     }
   }
 
-  // IntakeChat manages its own scrolling with height: 100%; other screens need an overflow container.
-  const chatActive = screen === 'intake-chat' && !allAnswered
+  const chatActive    = screen === 'intake-chat' && !allAnswered
+  const theaterActive = screen === 'theater'
+  const briefActive   = screen === 'brief'
+
+  const sidebarItems = libraryItems.length > 0
+    ? libraryItems.map(item => ({
+        runId:     item.runId,
+        idea:      item.idea,
+        verdict:   item.verdict,
+        status:    item.status,
+        group:     (item.status === 'running' ? 'active' : 'done') as 'active' | 'done' | 'archive',
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      }))
+    : []
 
   return (
     <AppShell
       sidebar={
         <Sidebar
-          items={MOCK_LIBRARY}
+          items={sidebarItems}
           activeId={activeId}
           onNewIdea={handleNewIdea}
           onSelect={handleSelect}
@@ -303,12 +441,12 @@ export default function App() {
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <Topbar title={topbarTitle} />
+        {!theaterActive && !briefActive && <Topbar title={topbarTitle} />}
         <div
           style={{
-            flex:       1,
-            minHeight:  0,
-            overflowY:  chatActive ? 'hidden' : 'auto',
+            flex:      1,
+            minHeight: 0,
+            overflowY: chatActive || theaterActive || briefActive ? 'hidden' : 'auto',
           }}
         >
           {renderScreen()}
