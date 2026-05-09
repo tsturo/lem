@@ -1,10 +1,9 @@
 import { test, expect, _electron as electron } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
+import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
 import { join, resolve } from 'path'
 import { tmpdir } from 'os'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const Database = require('better-sqlite3') as typeof import('better-sqlite3')['default']
 
 const IDEA = 'a calendar app for parents and kids'
 const STUB_RUN_ID = 'stub-completed-001'
@@ -17,9 +16,11 @@ function createTestUserDataDir(): string {
   // Pre-seed settings.json so the app skips the loading-spinner check on claudePath
   writeFileSync(join(dir, 'settings.json'), JSON.stringify({ theme: 'auto', claudePath: '/usr/bin/env' }))
 
-  // Pre-seed library.db with a completed 'build' run so the Brief view is reachable
-  const db = new Database(join(dir, 'library.db'))
-  db.pragma('journal_mode = WAL')
+  // Pre-seed library.db with a completed 'build' run so the Brief view is reachable.
+  // Uses node:sqlite (built-in, no native ABI) so this setup code works regardless of
+  // whether better-sqlite3 is compiled for Electron or host Node.js.
+  const db = new DatabaseSync(join(dir, 'library.db'))
+  db.exec('PRAGMA journal_mode = WAL')
   db.exec(`
     CREATE TABLE IF NOT EXISTS runs (
       run_id    TEXT PRIMARY KEY,
