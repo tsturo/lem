@@ -5,6 +5,8 @@ export interface Settings {
 
 export type Verdict = 'build' | 'skip' | 'unsure'
 
+export type Status = 'running' | 'completed' | 'failed' | 'queued' | 'archived'
+
 export type RunGroup = 'active' | 'done' | 'archive'
 
 export type RunStatus = 'running' | 'completed' | 'failed' | 'archived'
