@@ -11,4 +11,5 @@ export const IPC = {
   RUN_LOG: 'run:log',
   WORKSPACE_READ_BRIEF: 'workspace:read-brief',
   SHELL_OPEN_EXTERNAL: 'shell:open-external',
+  SHELL_OPEN_FILE: 'shell:open-file',
 } as const
