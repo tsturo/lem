@@ -11,6 +11,7 @@ import * as fs from 'fs'
 class MockChildProcess extends EventEmitter {
   stdin = { on: vi.fn() }
   stdout = new EventEmitter()
+  stderr = new EventEmitter()
   kill = vi.fn()
 }
 
@@ -215,6 +216,74 @@ describe('OrchestratorBridge', () => {
       const spawnMock = spawn as ReturnType<typeof vi.fn>
       const opts = spawnMock.mock.calls[0][2] as Record<string, unknown>
       expect(opts.detached).toBeFalsy()
+    })
+  })
+
+  describe('real mode — stderr capture', () => {
+    it('captures stderr output and includes it in exit info on non-zero exit', () => {
+      const exitCalls: unknown[] = []
+      bridge.on('exit', (info) => exitCalls.push(info))
+
+      bridge.start('test idea')
+
+      mockChild.stderr.emit(
+        'data',
+        Buffer.from('Traceback (most recent call last):\n  File "app.py", line 1\nRuntimeError: crash\n'),
+      )
+      mockChild.emit('close', 1, null)
+
+      expect(exitCalls).toHaveLength(1)
+      const info = exitCalls[0] as Record<string, unknown>
+      expect(typeof info.stderr).toBe('string')
+      expect(info.stderr as string).toContain('RuntimeError: crash')
+    })
+
+    it('does not include stderr in exit info on successful exit', () => {
+      const exitCalls: unknown[] = []
+      bridge.on('exit', (info) => exitCalls.push(info))
+
+      bridge.start('test idea')
+
+      mockChild.stderr.emit('data', Buffer.from('some warning output\n'))
+      mockChild.emit('close', 0, null)
+
+      expect(exitCalls).toHaveLength(1)
+      const info = exitCalls[0] as Record<string, unknown>
+      expect(info.stderr).toBeUndefined()
+    })
+
+    it('bounds the rolling stderr buffer to 100 lines', () => {
+      const exitCalls: unknown[] = []
+      bridge.on('exit', (info) => exitCalls.push(info))
+
+      bridge.start('test idea')
+
+      const lines = Array.from({ length: 200 }, (_, i) => `line ${i}`).join('\n') + '\n'
+      mockChild.stderr.emit('data', Buffer.from(lines))
+      mockChild.emit('close', 1, null)
+
+      expect(exitCalls).toHaveLength(1)
+      const info = exitCalls[0] as Record<string, unknown>
+      expect(typeof info.stderr).toBe('string')
+      const captured = (info.stderr as string).split('\n')
+      expect(captured.length).toBeLessThanOrEqual(100)
+      // Rolling window keeps the last 100 lines (100–199)
+      expect(captured[0]).toBe('line 100')
+      expect(captured[captured.length - 1]).toBe('line 199')
+    })
+
+    it('includes stderr in exit info when the child process errors', () => {
+      const exitCalls: unknown[] = []
+      bridge.on('exit', (info) => exitCalls.push(info))
+
+      bridge.start('test idea')
+
+      mockChild.stderr.emit('data', Buffer.from('spawn error detail\n'))
+      mockChild.emit('error', new Error('spawn failed'))
+
+      expect(exitCalls).toHaveLength(1)
+      const info = exitCalls[0] as Record<string, unknown>
+      expect(info.stderr as string).toContain('spawn error detail')
     })
   })
 
