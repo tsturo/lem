@@ -34,3 +34,5 @@ env/
 # Env
 .env
 .env.local
+
+.superpowers/
