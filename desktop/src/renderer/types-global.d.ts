@@ -1,5 +1,6 @@
 import type { Settings, LibraryItem } from '../shared/types'
 import type { LogLine, ProgressEvent } from '../types/lem-events'
+import type { BriefData } from '../main/workspace-reader'
 
 declare global {
   interface Window {
@@ -27,6 +28,9 @@ declare global {
           callback: (event: ProgressEvent | { kind: string; [key: string]: unknown }) => void,
         ): () => void
         onLog(callback: (logLine: LogLine) => void): () => void
+      }
+      workspace: {
+        readBrief(workspacePath: string): Promise<BriefData>
       }
     }
   }

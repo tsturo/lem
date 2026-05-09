@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Verdict } from '../../shared/types'
 import { VerdictPill } from '../components/VerdictPill'
 import { PrimaryButton } from '../components/PrimaryButton'
@@ -33,6 +33,7 @@ export interface BriefProps {
   signalPills: string[]
   meta: BriefMeta
   onRefineAgain: () => void
+  workspacePath?: string
 }
 
 function DisabledActionButton({ label }: { label: string }) {
@@ -149,13 +150,45 @@ function SignalPill({ label }: { label: string }) {
 export function Brief({
   idea,
   verdict,
-  tabs,
-  calloutStats,
+  tabs: tabsProp,
+  calloutStats: calloutStatsProp,
   signalPills,
   meta,
   onRefineAgain,
+  workspacePath,
 }: BriefProps) {
-  const [activeTab, setActiveTab] = useState(tabs[0]?.id ?? '')
+  const [tabs, setTabs] = useState<BriefTab[]>(tabsProp)
+  const [calloutStats, setCalloutStats] = useState<BriefCalloutStats>(calloutStatsProp)
+  const [activeTab, setActiveTab] = useState(tabsProp[0]?.id ?? '')
+
+  useEffect(() => {
+    if (!workspacePath) return
+    window.lem.workspace.readBrief(workspacePath).then(data => {
+      setTabs([
+        {
+          id:      'exec',
+          label:   'Executive summary',
+          content: data.deliverables.executiveSummary ?? '',
+        },
+        {
+          id:      'mvp',
+          label:   'MVP plan',
+          content: data.deliverables.mvpPlan ?? '',
+        },
+        {
+          id:      'risks',
+          label:   'Risks & rejected',
+          content: data.deliverables.risksAndRejectedPaths ?? '',
+        },
+      ])
+      setCalloutStats({
+        recommendation: data.verdict ?? calloutStatsProp.recommendation,
+        confidence:     data.confidence ?? calloutStatsProp.confidence,
+        firstMilestone: data.firstMilestone ?? calloutStatsProp.firstMilestone,
+      })
+    })
+  }, [workspacePath])
+
   const activeContent = tabs.find(t => t.id === activeTab)?.content ?? ''
 
   return (
