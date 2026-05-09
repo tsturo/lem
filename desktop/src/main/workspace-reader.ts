@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { parse as parseYaml } from 'yaml'
+import { lemRunsDir } from './paths'
 
 export interface BriefData {
   verdict: string | null
@@ -12,6 +13,27 @@ export interface BriefData {
     risksAndRejectedPaths: string | null
   }
   wallClockMs: number | null
+}
+
+function assertInsideRunsDir(workspacePath: string, runsDir: string): void {
+  let resolvedRuns: string
+  try {
+    resolvedRuns = fs.realpathSync(runsDir)
+  } catch {
+    resolvedRuns = path.resolve(runsDir)
+  }
+
+  let resolvedWorkspace: string
+  try {
+    resolvedWorkspace = fs.realpathSync(workspacePath)
+  } catch {
+    throw new Error(`Path traversal blocked: '${workspacePath}' cannot be resolved`)
+  }
+
+  const prefix = resolvedRuns.endsWith(path.sep) ? resolvedRuns : resolvedRuns + path.sep
+  if (!resolvedWorkspace.startsWith(prefix)) {
+    throw new Error(`Path traversal blocked: '${workspacePath}' is outside lem runs directory`)
+  }
 }
 
 function readFileSafe(filePath: string): string | null {
@@ -59,7 +81,14 @@ function readWallClockMs(workspacePath: string): number | null {
 }
 
 export class WorkspaceReader {
+  private readonly runsDir: string
+
+  constructor(runsDir?: string) {
+    this.runsDir = runsDir ?? lemRunsDir()
+  }
+
   readBrief(workspacePath: string): BriefData {
+    assertInsideRunsDir(workspacePath, this.runsDir)
     const synthesisRaw = readFileSafe(path.join(workspacePath, 'meta', 'synthesis.md'))
     let verdict: string | null = null
     let confidence: string | null = null

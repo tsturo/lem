@@ -6,9 +6,10 @@ import * as os from 'os'
 import { WorkspaceReader } from '../../src/main/workspace-reader'
 
 const FIXTURE = path.resolve(__dirname, '../fixtures/sample-workspace')
+const FIXTURES_DIR = path.dirname(FIXTURE)
 
 describe('WorkspaceReader.readBrief — fixture workspace', () => {
-  const reader = new WorkspaceReader()
+  const reader = new WorkspaceReader(FIXTURES_DIR)
 
   it('reads all 3 deliverables from fixture', () => {
     const data = reader.readBrief(FIXTURE)
@@ -32,7 +33,7 @@ describe('WorkspaceReader.readBrief — fixture workspace', () => {
 })
 
 describe('WorkspaceReader.readBrief — missing files', () => {
-  const reader = new WorkspaceReader()
+  const reader = new WorkspaceReader(os.tmpdir())
 
   it('returns placeholder body for missing deliverable file', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lem-ws-'))
@@ -74,5 +75,45 @@ describe('WorkspaceReader.readBrief — missing files', () => {
     expect(data.wallClockMs).toBeNull()
 
     fs.rmSync(tmpDir, { recursive: true })
+  })
+})
+
+describe('WorkspaceReader.readBrief — path traversal protection', () => {
+  it('rejects a path outside the runs dir (/tmp/evil)', () => {
+    const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lem-runs-'))
+    const reader = new WorkspaceReader(runsDir)
+    expect(() => reader.readBrief('/tmp/evil')).toThrow('Path traversal blocked')
+    fs.rmSync(runsDir, { recursive: true })
+  })
+
+  it('rejects a relative traversal path (../../../etc/passwd)', () => {
+    const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lem-runs-'))
+    const reader = new WorkspaceReader(runsDir)
+    expect(() => reader.readBrief('../../../etc/passwd')).toThrow('Path traversal blocked')
+    fs.rmSync(runsDir, { recursive: true })
+  })
+
+  it('allows a valid workspace path inside the runs dir', () => {
+    const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lem-runs-'))
+    const ws = fs.mkdtempSync(path.join(runsDir, 'ws-'))
+    fs.mkdirSync(path.join(ws, 'meta'), { recursive: true })
+    fs.mkdirSync(path.join(ws, 'deliverables'), { recursive: true })
+
+    const reader = new WorkspaceReader(runsDir)
+    const data = reader.readBrief(ws)
+    expect(data.verdict).toBeNull()
+
+    fs.rmSync(runsDir, { recursive: true })
+  })
+
+  it('rejects a symlink inside the runs dir that points outside', () => {
+    const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lem-runs-'))
+    const escapePath = path.join(runsDir, 'escape')
+    fs.symlinkSync(os.homedir(), escapePath)
+
+    const reader = new WorkspaceReader(runsDir)
+    expect(() => reader.readBrief(escapePath)).toThrow('Path traversal blocked')
+
+    fs.rmSync(runsDir, { recursive: true })
   })
 })
