@@ -24,4 +24,18 @@ export function registerClaudeHandlers(ipcMain: IpcMain): void {
       stdio: 'ignore',
     }).unref()
   })
+
+  ipcMain.handle(IPC.SHELL_OPEN_FILE, async () => {
+    const { filePaths } = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      title: 'Attach a file',
+      filters: [
+        {
+          name: 'Images & documents',
+          extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'md', 'txt'],
+        },
+      ],
+    })
+    return filePaths[0] ?? null
+  })
 }

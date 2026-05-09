@@ -15,6 +15,7 @@ declare global {
       }
       shell: {
         openExternal(url: string): Promise<void>
+        openFile?(): Promise<string | null>
       }
       library: {
         list(): Promise<LibraryItem[]>
