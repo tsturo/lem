@@ -1,0 +1,253 @@
+@import "tailwindcss";
+
+/* ─── Rubik: bundled locally (offline-capable, no CDN) ───────────────────── */
+@font-face {
+  font-family: 'Rubik';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/Rubik-Latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Rubik';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/Rubik-Latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Rubik';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/Rubik-Latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ─── Tailwind 4: @theme tokens — CSS variable indirection ───────────────── */
+/* Each Tailwind utility (bg-bg, text-text, border-border, …) must resolve to  */
+/* a CSS *variable* — not a literal value — so dark-mode overrides take effect. */
+@theme {
+  /* Surfaces */
+  --color-bg:      var(--t-bg);
+  --color-surface: var(--t-surface);
+  --color-card-bg: var(--t-card-bg);
+
+  /* Text */
+  --color-text:   var(--t-text);
+  --color-text-2: var(--t-text-2);
+  --color-text-3: var(--t-text-3);
+
+  /* Border */
+  --color-border:        var(--t-border);
+  --color-border-strong: var(--t-border-strong);
+
+  /* Brand */
+  --color-purple: var(--t-purple);
+  --color-teal:   var(--t-teal);
+
+  /* Status */
+  --color-success: var(--t-status-success);
+  --color-info:    var(--t-status-info);
+  --color-warn:    var(--t-status-warn);
+  --color-error:   var(--t-status-error);
+  --color-muted:   var(--t-status-muted);
+
+  /* Typography */
+  --font-sans: var(--t-font);
+  --font-mono: var(--t-font-mono);
+
+  /* Radii */
+  --radius-sm:   var(--t-radius-sm);
+  --radius-md:   var(--t-radius-md);
+  --radius-lg:   var(--t-radius-lg);
+  --radius-xl:   var(--t-radius-xl);
+  --radius-pill: var(--t-radius-pill);
+
+  /* Animation durations */
+  --duration-fast: var(--t-dur-fast);
+  --duration-base: var(--t-dur-base);
+  --duration-slow: var(--t-dur-slow);
+
+  /* Spacing */
+  --spacing-1:  var(--t-sp-1);
+  --spacing-2:  var(--t-sp-2);
+  --spacing-3:  var(--t-sp-3);
+  --spacing-4:  var(--t-sp-4);
+  --spacing-5:  var(--t-sp-5);
+  --spacing-6:  var(--t-sp-6);
+  --spacing-8:  var(--t-sp-8);
+  --spacing-10: var(--t-sp-10);
+  --spacing-12: var(--t-sp-12);
+}
+
+/* ─── Base design tokens ─────────────────────────────────────────────────── */
+:root {
+  /* Brand */
+  --t-purple: #6c5ce7;
+  --t-teal:   #00cec9;
+  --t-grad:   linear-gradient(135deg, #6c5ce7, #00cec9);
+
+  /* Typography */
+  --t-font:      'Rubik', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+  --t-font-mono: 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Radii */
+  --t-radius-sm:   9px;
+  --t-radius-md:   12px;
+  --t-radius-lg:   14px;
+  --t-radius-xl:   16px;
+  --t-radius-pill: 100px;
+
+  /* Spacing (4px base) */
+  --t-sp-1:  4px;
+  --t-sp-2:  8px;
+  --t-sp-3:  12px;
+  --t-sp-4:  16px;
+  --t-sp-5:  20px;
+  --t-sp-6:  24px;
+  --t-sp-8:  32px;
+  --t-sp-10: 40px;
+  --t-sp-12: 48px;
+
+  /* Animation */
+  --t-easing:   cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-dur-fast: 0.12s;
+  --t-dur-base: 0.18s;
+  --t-dur-slow: 0.30s;
+
+  /* Status colors */
+  --t-status-success: var(--t-purple);
+  --t-status-info:    var(--t-teal);
+  --t-status-warn:    #d4a843;
+  --t-status-error:   #d97070;
+  --t-status-muted:   #c8c8d4;
+}
+
+/* ─── Light theme (default) ──────────────────────────────────────────────── */
+:root,
+[data-theme="light"] {
+  --t-bg:      #ffffff;
+  --t-surface: #f7f7fb;
+  --t-card-bg: #ffffff;
+
+  --t-text:   #1a1a2e;
+  --t-text-2: #4a4a68;
+  --t-text-3: #8888a4;
+
+  --t-border:        #e8e8f0;
+  --t-border-strong: #d0d0de;
+
+  --t-shadow-card:       0 2px 12px rgba(10, 15, 26, 0.06);
+  --t-shadow-card-hover: 0 4px 24px rgba(10, 15, 26, 0.10);
+  --t-shadow-window:     0 30px 60px -20px rgba(10, 15, 26, 0.18);
+  --t-shadow-cta:        0 4px 14px rgba(108, 92, 231, 0.30);
+
+  --t-pulse-rgb: 108, 92, 231;
+}
+
+/* ─── Dark theme ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --t-bg:      #0a0f1a;
+  --t-surface: #131829;
+  --t-card-bg: #11162a;
+
+  --t-text:   #e8edf3;
+  --t-text-2: #a8b0c2;
+  --t-text-3: #6b7388;
+
+  --t-border:        rgba(232, 237, 243, 0.08);
+  --t-border-strong: rgba(232, 237, 243, 0.12);
+
+  --t-shadow-card:       0 1px 0 rgba(232, 237, 243, 0.02);
+  --t-shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.40);
+  --t-shadow-window:     0 30px 60px -20px rgba(0, 0, 0, 0.60);
+  --t-shadow-cta:        0 4px 14px rgba(108, 92, 231, 0.40);
+
+  --t-pulse-rgb: 0, 206, 201;
+
+  --t-status-error: #e08585;
+  --t-status-muted: #3a4258;
+}
+
+/* ─── Animation keyframes ────────────────────────────────────────────────── */
+@keyframes t-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+@keyframes t-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes t-bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40%            { transform: translateY(-6px); }
+}
+
+@keyframes t-bounce-2 {
+  0%, 80%, 100% { transform: translateY(0); }
+  40%            { transform: translateY(-6px); }
+}
+
+@keyframes t-bounce-3 {
+  0%, 80%, 100% { transform: translateY(0); }
+  40%            { transform: translateY(-6px); }
+}
+
+/* Animation utility classes */
+.animate-t-pulse {
+  animation: t-pulse 1.4s ease-in-out infinite;
+}
+
+.animate-t-blink {
+  animation: t-blink 1s step-start infinite;
+}
+
+.animate-t-bounce > :nth-child(1) {
+  animation: t-bounce 1.4s var(--t-easing) infinite;
+}
+
+.animate-t-bounce > :nth-child(2) {
+  animation: t-bounce-2 1.4s var(--t-easing) 0.2s infinite;
+}
+
+.animate-t-bounce > :nth-child(3) {
+  animation: t-bounce-3 1.4s var(--t-easing) 0.4s infinite;
+}
+
+/* ─── Reduced-motion override ────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Base styles ────────────────────────────────────────────────────────── */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--t-bg);
+  color: var(--t-text);
+  font-family: var(--t-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
