@@ -7,4 +7,26 @@ contextBridge.exposeInMainWorld('lem', {
     get: (): Promise<Settings> => ipcRenderer.invoke(IPC.SETTINGS_GET),
     set: (settings: Settings): Promise<void> => ipcRenderer.invoke(IPC.SETTINGS_SET, settings),
   },
+
+  run: {
+    start(args: { idea: string; stub?: boolean; replaySpeed?: number }): Promise<string> {
+      return ipcRenderer.invoke(IPC.RUN_START, args)
+    },
+
+    cancel(runId: string): Promise<void> {
+      return ipcRenderer.invoke(IPC.RUN_CANCEL, runId)
+    },
+
+    onEvent(callback: (event: unknown) => void): () => void {
+      const listener = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data)
+      ipcRenderer.on(IPC.RUN_EVENT, listener)
+      return () => ipcRenderer.removeListener(IPC.RUN_EVENT, listener)
+    },
+
+    onLog(callback: (logLine: unknown) => void): () => void {
+      const listener = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data)
+      ipcRenderer.on(IPC.RUN_LOG, listener)
+      return () => ipcRenderer.removeListener(IPC.RUN_LOG, listener)
+    },
+  },
 })
