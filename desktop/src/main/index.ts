@@ -2,6 +2,10 @@ import { app, BrowserWindow, shell, ipcMain } from 'electron'
 import { join } from 'path'
 import { registerAllHandlers } from './ipc-register'
 import { registerClaudeHandlers } from './claude-ipc'
+import { LibraryDB } from './library-db'
+import { registerLibraryHandlers } from './library-ipc'
+
+const db = new LibraryDB(join(app.getPath('userData'), 'library.db'))
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -39,6 +43,7 @@ function createWindow(): BrowserWindow {
 app.whenReady().then(() => {
   registerAllHandlers(ipcMain)
   registerClaudeHandlers(ipcMain)
+  registerLibraryHandlers(ipcMain, db)
   createWindow()
 
   app.on('activate', () => {
@@ -53,3 +58,6 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+app.on('before-quit', () => db.close())
+process.on('exit', () => db.close())

@@ -1,4 +1,4 @@
-import type { Settings } from '../shared/types'
+import type { Settings, LibraryItem } from '../shared/types'
 
 declare global {
   interface Window {
@@ -14,6 +14,9 @@ declare global {
       }
       shell: {
         openExternal(url: string): Promise<void>
+      }
+      library: {
+        list(): Promise<LibraryItem[]>
       }
     }
   }
