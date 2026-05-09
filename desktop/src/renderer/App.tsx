@@ -6,13 +6,14 @@ import { Topbar } from '@/components/Topbar'
 import { IntakeInput } from '@/screens/IntakeInput'
 import { IntakeChat } from '@/screens/IntakeChat'
 import { Theater } from '@/screens/Theater'
+import { Brief } from '@/screens/Brief'
 import type { ChatMessage } from '../shared/types'
 import type { LogLine, ProgressEvent } from '../types/lem-events'
 import { useSettings } from '@/store/settings'
 import { useRuntime } from '@/store/runtime'
 import { useLibrary } from '@/store/library'
 
-type ScreenKind = 'empty' | 'intake-input' | 'intake-chat' | 'theater' | 'error'
+type ScreenKind = 'empty' | 'intake-input' | 'intake-chat' | 'theater' | 'brief' | 'error'
 
 const MOCK_QUESTIONS = [
   "Who's the primary user — is it you, a small team, or a broader consumer audience?",
@@ -178,6 +179,7 @@ export default function App() {
   const activeRunId   = useRuntime(s => s.activeRunId)
 
   const loadLibrary  = useLibrary(s => s.load)
+  const selectRun    = useLibrary(s => s.select)
   const libraryItems = useLibrary(s => s.items)
 
   const [screen,      setScreen]      = useState<ScreenKind>('intake-input')
@@ -212,6 +214,7 @@ export default function App() {
         } else if (ev.kind === 'phase_done') {
           onPhaseDone(runId, pev)
           if (pev.phase_id === '4') {
+            loadLibrary()
             setScreen('empty')
           }
         } else {
@@ -227,7 +230,7 @@ export default function App() {
       }
     })
     return off
-  }, [onPhaseStart, onPhaseDone, onPhaseSkipped, failRun])
+  }, [onPhaseStart, onPhaseDone, onPhaseSkipped, failRun, loadLibrary])
 
   useEffect(() => {
     const off = window.lem.run.onLog((logLine: LogLine) => {
@@ -291,9 +294,17 @@ export default function App() {
   }
 
   function handleSelect(runId: string) {
+    selectRun(runId)
     setActiveId(runId)
-    const run = runs[runId]
-    if (run && run.status === 'running') {
+    const runtimeRun = runs[runId]
+    if (runtimeRun && runtimeRun.status === 'running') {
+      setScreen('theater')
+      return
+    }
+    const item = libraryItems.find(r => r.runId === runId)
+    if (item?.status === 'completed') {
+      setScreen('brief')
+    } else if (item?.status === 'running') {
       setScreen('theater')
     } else {
       setScreen('empty')
@@ -311,6 +322,10 @@ export default function App() {
       case 'intake-input': return 'New Idea'
       case 'intake-chat':  return ideaText || 'Refining…'
       case 'theater':      return ideaText || 'Analyzing…'
+      case 'brief': {
+        const item = libraryItems.find(r => r.runId === activeId)
+        return item?.idea ?? 'Analysis'
+      }
       case 'error':        return 'Error'
       default:             return 'lem'
     }
@@ -356,6 +371,26 @@ export default function App() {
       case 'error':
         return <ErrorBanner message={errorMsg} />
 
+      case 'brief': {
+        const item = libraryItems.find(r => r.runId === activeId)
+        if (!item) return null
+        return (
+          <Brief
+            idea={item.idea}
+            verdict={item.verdict ?? 'unsure'}
+            tabs={[
+              { id: 'exec', label: 'Executive summary', content: '' },
+              { id: 'mvp', label: 'MVP plan', content: '' },
+              { id: 'risks', label: 'Risks & rejected', content: '' },
+            ]}
+            calloutStats={{ recommendation: item.verdict ?? 'unsure', confidence: '—', firstMilestone: '—' }}
+            signalPills={[]}
+            meta={{ version: '0.1.0', phases: 11, specialists: 3, date: item.createdAt.split('T')[0] ?? '—' }}
+            onRefineAgain={handleNewIdea}
+          />
+        )
+      }
+
       case 'empty':
       default: {
         const item = libraryItems.find(r => r.runId === activeId)
@@ -378,8 +413,9 @@ export default function App() {
     }
   }
 
-  const chatActive = screen === 'intake-chat' && !allAnswered
+  const chatActive    = screen === 'intake-chat' && !allAnswered
   const theaterActive = screen === 'theater'
+  const briefActive   = screen === 'brief'
 
   const sidebarItems = libraryItems.length > 0
     ? libraryItems.map(item => ({
@@ -405,12 +441,12 @@ export default function App() {
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        {!theaterActive && <Topbar title={topbarTitle} />}
+        {!theaterActive && !briefActive && <Topbar title={topbarTitle} />}
         <div
           style={{
             flex:      1,
             minHeight: 0,
-            overflowY: chatActive || theaterActive ? 'hidden' : 'auto',
+            overflowY: chatActive || theaterActive || briefActive ? 'hidden' : 'auto',
           }}
         >
           {renderScreen()}
