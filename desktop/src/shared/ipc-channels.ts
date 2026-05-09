@@ -2,6 +2,8 @@ export const IPC = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   CLAUDE_DETECT: 'claude:detect',
+  CLAUDE_PICK_PATH: 'claude:pick-path',
+  CLAUDE_LOGIN: 'claude:login',
   LIBRARY_LIST: 'library:list',
   RUN_START: 'run:start',
   RUN_CANCEL: 'run:cancel',
