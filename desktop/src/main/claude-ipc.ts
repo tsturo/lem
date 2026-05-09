@@ -7,7 +7,11 @@ export function registerClaudeHandlers(ipcMain: IpcMain): void {
   ipcMain.handle(IPC.CLAUDE_DETECT, () => detectClaude())
 
   ipcMain.handle(IPC.SHELL_OPEN_EXTERNAL, (_event, url: string) => {
-    shell.openExternal(url)
+    const parsed = new URL(url)
+    if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+      throw new Error(`Refusing to open URL with scheme ${parsed.protocol}`)
+    }
+    return shell.openExternal(url)
   })
 
   ipcMain.handle(IPC.CLAUDE_PICK_PATH, async () => {

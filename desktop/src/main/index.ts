@@ -34,6 +34,14 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  win.webContents.on('will-navigate', (event, url) => {
+    event.preventDefault()
+    const parsed = new URL(url)
+    if (['http:', 'https:'].includes(parsed.protocol)) {
+      shell.openExternal(url)
+    }
+  })
+
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -44,6 +52,11 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-navigate', (e) => e.preventDefault())
+    contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  })
+
   registerAllHandlers(ipcMain)
   registerClaudeHandlers(ipcMain)
   registerLibraryHandlers(ipcMain, db)
