@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('lem', {
   },
   shell: {
     openExternal: (url: string): Promise<void> => ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url),
+    openFile: (): Promise<string | null> => ipcRenderer.invoke(IPC.SHELL_OPEN_FILE),
   },
   library: {
     list: (): Promise<LibraryItem[]> => ipcRenderer.invoke(IPC.LIBRARY_LIST),

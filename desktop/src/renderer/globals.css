@@ -238,6 +238,42 @@
   }
 }
 
+/* ─── Gradient accent text (single hero word) ───────────────────────────── */
+.t-accent {
+  background: var(--t-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* ─── Intake textarea — focus ring via CSS, not JS ───────────────────────── */
+.intake-textarea {
+  border: 1.5px solid var(--t-border);
+  border-radius: var(--t-radius-md);
+  padding: 13px 16px;
+  font-size: 15px;
+  font-family: var(--t-font);
+  font-weight: 400;
+  line-height: 1.6;
+  background: var(--t-bg);
+  color: var(--t-text);
+  resize: vertical;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color var(--t-dur-base), box-shadow var(--t-dur-base);
+}
+
+.intake-textarea::placeholder {
+  color: var(--t-text-3);
+}
+
+.intake-textarea:focus {
+  border-color: var(--t-purple);
+  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
+}
+
 /* ─── Base styles ────────────────────────────────────────────────────────── */
 html,
 body,
