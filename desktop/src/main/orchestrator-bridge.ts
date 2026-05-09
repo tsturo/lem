@@ -15,6 +15,7 @@ export interface ExitInfo {
   code: number | null
   signal: NodeJS.Signals | null
   error?: Error
+  stderr?: string
 }
 
 function stubEventsPath(): string {
@@ -30,10 +31,15 @@ function lemRunsDir(): string {
   return path.join(xdgData, 'lem', 'runs')
 }
 
+const STDERR_MAX_LINES = 100
+const STDERR_MAX_BYTES = 64 * 1024
+
 export class OrchestratorBridge extends EventEmitter {
   private child: ChildProcess | null = null
   private killTimer: ReturnType<typeof setTimeout> | null = null
   private logCleanup: (() => void) | null = null
+  private stderrLines: string[] = []
+  private stderrBytes = 0
 
   start(idea: string, options: StartOptions = {}): string {
     this._cleanup()
@@ -60,18 +66,22 @@ export class OrchestratorBridge extends EventEmitter {
   }
 
   private _spawnLem(idea: string): void {
+    this.stderrLines = []
+    this.stderrBytes = 0
+
     const child = spawn('lem', ['refine', idea, '--json-events', '--skip-intake'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
       detached: false,
     })
     this.child = child
 
-    child.stdin.on('error', () => {})
+    child.stdin!.on('error', () => {})
 
-    let buffer = ''
-    child.stdout.on('data', (chunk: Buffer) => {
-      buffer += chunk.toString('utf8')
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
+    let stdoutBuf = ''
+    child.stdout!.on('data', (chunk: Buffer) => {
+      stdoutBuf += chunk.toString('utf8')
+      const lines = stdoutBuf.split('\n')
+      stdoutBuf = lines.pop() ?? ''
       for (const line of lines) {
         if (!line.trim()) continue
         try {
@@ -83,9 +93,28 @@ export class OrchestratorBridge extends EventEmitter {
       }
     })
 
+    let stderrBuf = ''
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderrBuf += chunk.toString('utf8')
+      const lines = stderrBuf.split('\n')
+      stderrBuf = lines.pop() ?? ''
+      for (const line of lines) {
+        const lineBytes = Buffer.byteLength(line, 'utf8') + 1
+        this.stderrLines.push(line)
+        this.stderrBytes += lineBytes
+        while (this.stderrLines.length > STDERR_MAX_LINES || this.stderrBytes > STDERR_MAX_BYTES) {
+          const removed = this.stderrLines.shift()
+          if (removed !== undefined) {
+            this.stderrBytes -= Buffer.byteLength(removed, 'utf8') + 1
+          }
+        }
+      }
+    })
+
     child.on('error', (err: Error) => {
       this._clearKillTimer()
-      const info: ExitInfo = { code: null, signal: null, error: err }
+      const stderr = this.stderrLines.length > 0 ? this.stderrLines.join('\n') : undefined
+      const info: ExitInfo = { code: null, signal: null, error: err, stderr }
       this.emit('exit', info)
       this.child = null
     })
@@ -95,7 +124,9 @@ export class OrchestratorBridge extends EventEmitter {
       if (code === 69) {
         this.emit('auth_expired')
       }
-      const info: ExitInfo = { code, signal }
+      const stderr =
+        code !== 0 && this.stderrLines.length > 0 ? this.stderrLines.join('\n') : undefined
+      const info: ExitInfo = { code, signal, stderr }
       this.emit('exit', info)
       this.child = null
     })

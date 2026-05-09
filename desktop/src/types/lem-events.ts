@@ -41,3 +41,11 @@ export interface RunSnapshot {
   eta?: string
   status: 'running' | 'completed' | 'failed'
 }
+
+export interface RunExitEvent {
+  kind: 'run_exit'
+  code: number | null
+  signal: NodeJS.Signals | null
+  error?: Error
+  stderr?: string
+}

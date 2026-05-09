@@ -1,7 +1,7 @@
 import type { IpcMain, BrowserWindow } from 'electron'
 import { OrchestratorBridge, ExitInfo } from './orchestrator-bridge'
 import { IPC } from '../shared/ipc-channels'
-import type { LogLine, ProgressEvent } from '../types/lem-events'
+import type { LogLine, ProgressEvent, RunExitEvent } from '../types/lem-events'
 
 export function registerOrchestratorHandlers(
   ipcMain: IpcMain,
@@ -29,7 +29,8 @@ export function registerOrchestratorHandlers(
         win?.webContents.send(IPC.RUN_LOG, logLine)
       }
       function onExit(info: ExitInfo): void {
-        win?.webContents.send(IPC.RUN_EVENT, { kind: 'run_exit', ...info })
+        const exitEvent: RunExitEvent = { kind: 'run_exit', ...info }
+        win?.webContents.send(IPC.RUN_EVENT, exitEvent)
       }
       function onAuthExpired(): void {
         win?.webContents.send(IPC.RUN_EVENT, { kind: 'auth_expired' })
