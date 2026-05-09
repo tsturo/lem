@@ -4,8 +4,11 @@ import { registerAllHandlers } from './ipc-register'
 import { registerClaudeHandlers } from './claude-ipc'
 import { LibraryDB } from './library-db'
 import { registerLibraryHandlers } from './library-ipc'
+import { WorkspaceReader } from './workspace-reader'
+import { registerWorkspaceHandlers } from './workspace-ipc'
 
 const db = new LibraryDB(join(app.getPath('userData'), 'library.db'))
+const workspaceReader = new WorkspaceReader()
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -44,6 +47,7 @@ app.whenReady().then(() => {
   registerAllHandlers(ipcMain)
   registerClaudeHandlers(ipcMain)
   registerLibraryHandlers(ipcMain, db)
+  registerWorkspaceHandlers(ipcMain, workspaceReader)
   createWindow()
 
   app.on('activate', () => {

@@ -1,0 +1,4 @@
+{"run_id":"run-test-001","phase":"0.5","role":"jtbd-extractor","started_at":1746784800.0,"ended_at":1746784814.3,"duration_s":14.3,"attempt":1}
+{"run_id":"run-test-001","phase":"0.6","role":"frame-shifter","started_at":1746784816.0,"ended_at":1746784849.7,"duration_s":33.7,"attempt":1}
+{"run_id":"run-test-001","phase":"1","role":"architect","started_at":1746784852.0,"ended_at":1746784920.5,"duration_s":68.5,"attempt":1}
+{"run_id":"run-test-001","phase":"4","role":"synthesizer","started_at":1746785100.0,"ended_at":1746785220.0,"duration_s":120.0,"attempt":1}
