@@ -8,6 +8,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "tsc": "tsc --noEmit",
+    "test": "vitest run tests/unit",
     "test:unit": "vitest run tests/unit",
     "test:e2e": "playwright test tests/e2e"
   },
