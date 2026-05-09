@@ -1,9 +1,11 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+const mockOpenExternal = vi.hoisted(() => vi.fn())
+
 vi.mock('electron', () => ({
   dialog: { showOpenDialog: vi.fn() },
-  shell: { openExternal: vi.fn() },
+  shell: { openExternal: mockOpenExternal },
 }))
 
 vi.mock('child_process', () => ({
@@ -17,6 +19,7 @@ vi.mock('../../src/main/claude-detect', () => ({
 import * as childProcess from 'child_process'
 import * as claudeDetect from '../../src/main/claude-detect'
 import { registerClaudeHandlers } from '../../src/main/claude-ipc'
+import { IPC } from '../../src/shared/ipc-channels'
 
 type SpawnMock = ReturnType<typeof vi.fn>
 type DetectMock = ReturnType<typeof vi.fn>
@@ -90,5 +93,47 @@ describe('CLAUDE_LOGIN IPC handler', () => {
       ['/login'],
       { detached: true, stdio: 'ignore' },
     )
+  })
+})
+
+describe('SHELL_OPEN_EXTERNAL – scheme allowlist', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function invokeOpenExternal(url: string) {
+    const ipcMain = makeIpcMain()
+    registerClaudeHandlers(ipcMain as never)
+    return () => ipcMain.invoke(IPC.SHELL_OPEN_EXTERNAL, url)
+  }
+
+  it('allows http: URLs', () => {
+    invokeOpenExternal('http://example.com')()
+    expect(mockOpenExternal).toHaveBeenCalledWith('http://example.com')
+  })
+
+  it('allows https: URLs', () => {
+    invokeOpenExternal('https://example.com/path?q=1')()
+    expect(mockOpenExternal).toHaveBeenCalledWith('https://example.com/path?q=1')
+  })
+
+  it('allows mailto: URLs', () => {
+    invokeOpenExternal('mailto:user@example.com')()
+    expect(mockOpenExternal).toHaveBeenCalledWith('mailto:user@example.com')
+  })
+
+  it('rejects file: URLs', () => {
+    expect(invokeOpenExternal('file:///etc/passwd')).toThrow('file:')
+    expect(mockOpenExternal).not.toHaveBeenCalled()
+  })
+
+  it('rejects javascript: URLs', () => {
+    expect(invokeOpenExternal('javascript:alert(1)')).toThrow('javascript:')
+    expect(mockOpenExternal).not.toHaveBeenCalled()
+  })
+
+  it('rejects vscode: URLs', () => {
+    expect(invokeOpenExternal('vscode://extension/foo')).toThrow('vscode:')
+    expect(mockOpenExternal).not.toHaveBeenCalled()
   })
 })
