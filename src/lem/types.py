@@ -33,6 +33,10 @@ class WorkerResult:
     schema_errors: list[str]
 
 
+class AuthExpired(Exception):
+    """Raised when the claude CLI exits with code 69 (not authenticated)."""
+
+
 @dataclasses.dataclass(kw_only=True)
 class RunState:
     run_id: str
@@ -41,6 +45,7 @@ class RunState:
     status: Literal[
         "running", "completed", "failed",
         "cost-aborted", "wall-clock-aborted", "cancelled",
+        "auth_expired",
     ]
     started_at: float
     last_event_at: float

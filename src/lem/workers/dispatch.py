@@ -21,7 +21,7 @@ import dataclasses
 
 from lem.schema.parser import FrontmatterError, parse_file
 from lem.schema.validator import validate
-from lem.types import WorkerInvocation, WorkerResult
+from lem.types import AuthExpired, WorkerInvocation, WorkerResult
 from lem.workers import cli_worker
 
 _AUTH_EXIT_CODE = 69
@@ -37,7 +37,7 @@ def dispatch_worker(
     """Invoke the CLI worker with retry-on-schema-failure and non-zero-exit retry.
 
     Decision tree per attempt:
-    - exit_code == 69 (auth) → return immediately, no retry.
+    - exit_code == 69 (auth) → raise AuthExpired immediately, no retry.
     - stop_reason == "timeout" → return immediately, no retry.
     - exit_code != 0 (other) → retry once with no backoff, then return.
     - exit_code == 0, output_schema is None → return as-is.
@@ -47,17 +47,16 @@ def dispatch_worker(
     """
     result = cli_worker.invoke(inv, system_prompt, allowed_tools)
 
-    if _is_terminal(result):
+    if result.exit_code == _AUTH_EXIT_CODE:
+        raise AuthExpired()
+
+    if result.stop_reason == "timeout":
         return result
 
     if result.exit_code != 0:
         return _retry_nonzero(inv, system_prompt, allowed_tools)
 
     return _handle_success(inv, system_prompt, allowed_tools, result, output_schema)
-
-
-def _is_terminal(result: WorkerResult) -> bool:
-    return result.exit_code == _AUTH_EXIT_CODE or result.stop_reason == "timeout"
 
 
 def _retry_nonzero(

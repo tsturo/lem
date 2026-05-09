@@ -29,6 +29,7 @@ from lem.state.events import write_event
 from lem.state.log import append_log
 from lem.state.run_state import write_state
 from lem.types import (
+    AuthExpired,
     LogEvent,
     PhaseSpec,
     Profile,
@@ -207,6 +208,16 @@ def run_orchestrator(
 
         if cfg.webhook_url:
             post_webhook(cfg.webhook_url, state)
+
+    except AuthExpired:
+        state.status = "auth_expired"
+        state.error = "auth_expired: claude CLI not authenticated (exit 69)"
+        if cfg.on_error:
+            try:
+                cfg.on_error(state)
+            except Exception:
+                pass
+        fire_on_error(state, hook_config)
 
     except Exception as exc:
         state.status = "failed"

@@ -128,6 +128,8 @@ def refine(
             printer.on_run_end(state)
         else:
             typer.echo(f"Run complete: {workspace_path.name} (status={state.status})")
+        if state.status == "auth_expired":
+            raise typer.Exit(code=69)
     else:
         actual_run_id = daemonize(
             workspace_path,

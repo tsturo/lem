@@ -9,7 +9,7 @@ from typing import Iterator
 
 import pytest
 
-from lem.types import WorkerInvocation, WorkerResult
+from lem.types import AuthExpired, WorkerInvocation, WorkerResult
 from lem.workers.dispatch import dispatch_worker
 
 _SCHEMA: dict[str, object] = {"required_sections": ["Summary"]}
@@ -151,14 +151,14 @@ def test_schema_invalid_then_invalid_returns_failure(
 # ---------------------------------------------------------------------------
 
 
-def test_auth_error_no_retry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_auth_error_raises_auth_expired(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     inv = _make_inv(tmp_path)
     r = _make_result(tmp_path, exit_code=69, stop_reason="error")
     calls = _patch_invoke(monkeypatch, [r])
 
-    result = dispatch_worker(inv, "sys", [], output_schema=_SCHEMA)
+    with pytest.raises(AuthExpired):
+        dispatch_worker(inv, "sys", [], output_schema=_SCHEMA)
 
-    assert result.exit_code == 69
     assert len(calls) == 1
 
 
