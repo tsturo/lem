@@ -18,8 +18,10 @@ export function registerClaudeHandlers(ipcMain: IpcMain): void {
     return filePaths[0] ?? null
   })
 
-  ipcMain.handle(IPC.CLAUDE_LOGIN, (_event, claudePath: string) => {
-    spawn(claudePath, ['/login'], {
+  ipcMain.handle(IPC.CLAUDE_LOGIN, async () => {
+    const validatedPath = await detectClaude()
+    if (!validatedPath) throw new Error('No validated claude binary found')
+    spawn(validatedPath, ['/login'], {
       detached: true,
       stdio: 'ignore',
     }).unref()

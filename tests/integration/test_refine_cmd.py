@@ -303,3 +303,41 @@ def test_daemon_path_does_not_pass_progress_cb(
             ["refine", "an idea", "--workspace", str(tmp_path), "--skip-intake"],
         )
     assert result.exit_code == 0
+
+
+def test_attach_exits_69_on_auth_expired(runner: CliRunner, tmp_path: Path) -> None:
+    """When the orchestrator returns auth_expired status, lem refine --attach exits 69."""
+    fake_state = MagicMock()
+    fake_state.status = "auth_expired"
+    fake_state.run_id = "test-run"
+    fake_state.cost_so_far = 0.0
+
+    with patch("lem.commands.refine.run_intake") as mock_intake, \
+         patch("lem.commands.refine.run_orchestrator") as mock_orch:
+        mock_intake.return_value = MagicMock()
+        mock_orch.return_value = fake_state
+        result = runner.invoke(
+            app,
+            ["refine", "dog walking app", "--workspace", str(tmp_path),
+             "--skip-intake", "--attach"],
+        )
+    assert result.exit_code == 69
+
+
+def test_attach_does_not_exit_69_on_completed(runner: CliRunner, tmp_path: Path) -> None:
+    """Successful runs must not exit with code 69."""
+    fake_state = MagicMock()
+    fake_state.status = "completed"
+    fake_state.run_id = "test-run"
+    fake_state.cost_so_far = 0.0
+
+    with patch("lem.commands.refine.run_intake") as mock_intake, \
+         patch("lem.commands.refine.run_orchestrator") as mock_orch:
+        mock_intake.return_value = MagicMock()
+        mock_orch.return_value = fake_state
+        result = runner.invoke(
+            app,
+            ["refine", "dog walking app", "--workspace", str(tmp_path),
+             "--skip-intake", "--attach"],
+        )
+    assert result.exit_code == 0
