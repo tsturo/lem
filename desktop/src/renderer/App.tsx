@@ -315,7 +315,8 @@ export default function App() {
     setAllAnswered(false)
   }
 
-  function handleSelect(runId: string) {
+  function handleSelectIdeaRound(ideaId: string, runId: string) {
+    void ideaId
     selectRun(runId)
     setActiveId(runId)
     const runtimeRun = runs[runId]
@@ -331,6 +332,10 @@ export default function App() {
     } else {
       setScreen('empty')
     }
+  }
+
+  function handleSkipIdea(_ideaId: string) {
+    // cascade logic is out of scope for this task
   }
 
   function handleStop() {
@@ -444,27 +449,14 @@ export default function App() {
   const theaterActive = screen === 'theater'
   const briefActive   = screen === 'brief'
 
-  const sidebarItems = libraryItems.length > 0
-    ? libraryItems.map(item => ({
-        runId:         item.runId,
-        idea:          item.idea,
-        verdict:       item.verdict,
-        status:        item.status,
-        group:         (item.status === 'running' ? 'active' : 'done') as 'active' | 'done' | 'archive',
-        workspacePath: item.workspacePath,
-        createdAt:     item.createdAt,
-        updatedAt:     item.updatedAt,
-      }))
-    : []
-
   return (
     <AppShell
       sidebar={
         <Sidebar
-          items={sidebarItems}
           activeId={activeId}
           onNewIdea={handleNewIdea}
-          onSelect={handleSelect}
+          onSelectIdeaRound={handleSelectIdeaRound}
+          onSkipIdea={handleSkipIdea}
         />
       }
     >
