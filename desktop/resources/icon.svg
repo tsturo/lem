@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6c5ce7"/>
+      <stop offset="100%" stop-color="#00cec9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Squircle-ish background. macOS will mask if needed; we keep it for Linux/Win parity. -->
+  <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224" fill="#0a0f1a"/>
+
+  <!-- Tonale waveform: 9 bars, bottom-aligned, sized to ~640x640 inside the icon. -->
+  <!-- Bar widths and gaps: 9 bars + 8 gaps. Gap = 8px. Bar width = (640 - 8*8) / 9 = 64px. -->
+  <!-- Origin centered: x starts at 192, y baseline at 832 (= 1024 - 192 padding). -->
+  <!-- Heights = pct * 640 / 100. -->
+  <g transform="translate(192, 832)">
+    <!-- bar 0: h=35% → 224, opacity=0.55 -->
+    <rect x="0"   y="-224" width="64" height="224" rx="6" ry="6" fill="url(#grad)" opacity="0.55"/>
+    <!-- bar 1: h=55% → 352, opacity=0.7 -->
+    <rect x="72"  y="-352" width="64" height="352" rx="6" ry="6" fill="url(#grad)" opacity="0.7"/>
+    <!-- bar 2: h=75% → 480, opacity=0.85 -->
+    <rect x="144" y="-480" width="64" height="480" rx="6" ry="6" fill="url(#grad)" opacity="0.85"/>
+    <!-- bar 3: h=90% → 576, opacity=1 -->
+    <rect x="216" y="-576" width="64" height="576" rx="6" ry="6" fill="url(#grad)"/>
+    <!-- bar 4: h=100% → 640, opacity=1 -->
+    <rect x="288" y="-640" width="64" height="640" rx="6" ry="6" fill="url(#grad)"/>
+    <!-- bar 5: h=90% → 576, opacity=1 -->
+    <rect x="360" y="-576" width="64" height="576" rx="6" ry="6" fill="url(#grad)"/>
+    <!-- bar 6: h=75% → 480, opacity=0.85 -->
+    <rect x="432" y="-480" width="64" height="480" rx="6" ry="6" fill="url(#grad)" opacity="0.85"/>
+    <!-- bar 7: h=55% → 352, opacity=0.7 -->
+    <rect x="504" y="-352" width="64" height="352" rx="6" ry="6" fill="url(#grad)" opacity="0.7"/>
+    <!-- bar 8: h=35% → 224, opacity=0.55 -->
+    <rect x="576" y="-224" width="64" height="224" rx="6" ry="6" fill="url(#grad)" opacity="0.55"/>
+  </g>
+</svg>

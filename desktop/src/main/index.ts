@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, nativeImage } from 'electron'
 import { join } from 'path'
 import { registerAllHandlers, bridge } from './ipc-register'
 import { registerClaudeHandlers } from './claude-ipc'
@@ -12,6 +12,12 @@ import { registerIdeasHandlers } from './ipc/ideas'
 const db = new LibraryDB(join(app.getPath('userData'), 'library.db'))
 const workspaceReader = new WorkspaceReader()
 
+// Icon path: dev runs from desktop/out/main/, packaged from <bundle>/Resources/app.asar.
+// In dev we resolve relative to the source. In a packaged build electron-builder bundles
+// resources/icon.icns into the .app automatically, so this in-code path is mostly a
+// dev/Linux/Windows fallback (macOS uses the bundled .icns from the .app at OS level).
+const ICON_PATH = join(__dirname, '../../resources/icon.png')
+
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1200,
@@ -22,6 +28,7 @@ function createWindow(): BrowserWindow {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 12 },
     backgroundColor: '#ffffff',
+    icon: ICON_PATH,
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
@@ -54,6 +61,16 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // macOS dock icon override (development; in a packaged build the OS reads from the
+  // .app's Info.plist + bundled icon.icns instead).
+  if (process.platform === 'darwin' && app.dock) {
+    try {
+      app.dock.setIcon(nativeImage.createFromPath(ICON_PATH))
+    } catch {
+      // best-effort; default Electron icon if file missing
+    }
+  }
+
   app.on('web-contents-created', (_event, contents) => {
     contents.on('will-navigate', (e) => e.preventDefault())
     contents.setWindowOpenHandler(() => ({ action: 'deny' }))
