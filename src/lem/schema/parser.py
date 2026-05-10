@@ -68,7 +68,13 @@ def _extract_frontmatter(lines: list[str]) -> tuple[dict[str, object], int]:
                 body_start += 1
             return parsed, body_start
 
-    raise UnterminatedFrontmatter("opening --- has no closing ---", line=1)
+    # No closing fence: treat the entire remainder as YAML frontmatter (no body).
+    # This is the synthesizer's natural output shape — pure structured data,
+    # no narrative section. Strict-fence enforcement was causing crashes when
+    # Opus omitted the trailing ---.
+    raw = "".join(lines[1:])
+    parsed = _parse_yaml_block(raw, fence_line=len(lines))
+    return parsed, len(lines)
 
 
 def _parse_yaml_block(raw: str, fence_line: int) -> dict[str, object]:

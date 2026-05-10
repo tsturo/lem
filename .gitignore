@@ -44,3 +44,9 @@ desktop/out/
 desktop/test-results/
 desktop/playwright-report/
 desktop/.vite/
+
+# Debussy / takt session state (local only)
+.debussy/
+.takt/
+.debussy-worktrees/
+desktop/.claude/

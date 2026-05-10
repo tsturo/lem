@@ -7,9 +7,14 @@ const CREATE_TABLE = `
     idea TEXT NOT NULL,
     status TEXT NOT NULL,
     verdict TEXT,
+    workspace_path TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )
+`
+
+const ADD_WORKSPACE_PATH_COL = `
+  ALTER TABLE runs ADD COLUMN workspace_path TEXT NOT NULL DEFAULT ''
 `
 
 const CREATE_INDEX = `
@@ -21,6 +26,7 @@ interface DbRow {
   idea: string
   status: string
   verdict: string | null
+  workspace_path: string
   created_at: string
   updated_at: string
 }
@@ -34,15 +40,20 @@ export class LibraryDB {
     this.db.pragma('journal_mode = WAL')
     this.db.exec(CREATE_TABLE)
     this.db.exec(CREATE_INDEX)
+    try {
+      this.db.exec(ADD_WORKSPACE_PATH_COL)
+    } catch {
+      // column already exists on existing DBs, ignore
+    }
   }
 
   upsert(row: RunRow): void {
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO runs (run_id, idea, status, verdict, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO runs (run_id, idea, status, verdict, workspace_path, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(row.runId, row.idea, row.status, row.verdict ?? null, row.createdAt, row.updatedAt)
+      .run(row.runId, row.idea, row.status, row.verdict ?? null, row.workspacePath, row.createdAt, row.updatedAt)
   }
 
   list(): LibraryItem[] {
@@ -55,6 +66,7 @@ export class LibraryDB {
       idea: r.idea,
       verdict: r.verdict as LibraryItem['verdict'],
       status: r.status as LibraryItem['status'],
+      workspacePath: r.workspace_path,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }))

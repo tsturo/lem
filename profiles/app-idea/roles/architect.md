@@ -68,3 +68,4 @@ Can this actually be built by a small team in a reasonable timeframe, or does it
 - **No filler.** If a section has nothing substantive to say, that's a signal the idea is underspecified — flag it explicitly rather than padding.
 - **Specifics over hedges.** Prefer "Postgres with row-level security" over "a relational database with appropriate access controls."
 - **Cite assumptions.** When a claim depends on an unconfirmed assumption, say so inline.
+- **No jargon shorthand in prose.** A non-technical founder reads this. Spell out "the job your product is hired to do" instead of "JTBD"; "the kind of customer most likely to pay" instead of "ICP"; etc. Concrete technical terms (Postgres, IndexedDB, MVP, REST, OAuth) are fine — they describe specific things. The rule targets consultant-speak acronyms.

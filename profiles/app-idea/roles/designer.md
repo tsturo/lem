@@ -71,3 +71,4 @@ For each entry in `failure_states`, write 2–3 sentences on what the user sees 
 - **Pick a pattern, don't list options.** If you cannot pick, that's a real signal — surface it as a branching axis, not as hedging.
 - **No filler.** If a section is thin, the idea is thin; say that explicitly.
 - **Cite assumptions.** When a flow depends on an unconfirmed user behavior, mark it.
+- **No jargon shorthand in prose.** A non-technical founder reads this. Spell out "the job your product is hired to do" instead of "JTBD"; "the kind of customer most likely to pay" instead of "ICP"; etc. The rule targets consultant-speak acronyms, not concrete UX terms.

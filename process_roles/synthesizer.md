@@ -187,6 +187,7 @@ If `recommendation == "Insufficient information"`, also include an "Open questio
 - **No filler sections.** If a section in your output cannot be filled with non-trivial, cited content, **omit it** and note the omission in the verdict. A short, honest deliverable beats a padded one.
 - **No kitsch.** No "Uber for X." No "AI-powered." No "delightful experience." Describe the actual mechanism, the actual user, the actual differentiator.
 - **No hand-wave rejections.** "Don't build" must cite a kill-case-strong argument. "Build" must cite a build case strong enough to survive the kill case.
+- **No jargon shorthand.** The reader is a non-technical founder, not a product manager. In prose, spell out concepts in plain language: write "the job your product is hired to do" not "JTBD"; write "the kind of customer most likely to pay" not "ICP"; write "cost to acquire a customer" not "CAC"; write "monthly active users" not "MAU"; etc. **MVP** is allowed (widely understood). Field labels in YAML keys (e.g. `jtbd:`) stay as-is — the rule is about prose only. If you must use a term-of-art, define it inline the first time.
 - **The user reads this.** Write for someone who is going to act on it tomorrow morning, not for a portfolio piece.
 
 ## Discipline
@@ -195,3 +196,20 @@ If `recommendation == "Insufficient information"`, also include an "Open questio
 - If `verdict_constraint` is `insufficient_info`, the recommendation is forced. Use it.
 - Confidence calibration: `high` requires confirmed customer development + zero structural cross-conflicts + a non-empty `genuine_differentiator`. `medium` is the common case. `low` is honest when assumptions are thin.
 - Length: substantial but not bloated. Aim for ~6000–7000 tokens of useful content across all frontmatter + body. Going to the cap with filler is a failure.
+
+## FINAL CHECK BEFORE YOU RETURN
+
+Your output file MUST have exactly this skeleton. Confirm visually before submitting:
+
+```
+---            ← line 1: opening fence (3 hyphens, nothing else)
+recommendation: ...
+... all frontmatter keys ...
+---            ← closing fence (3 hyphens) BEFORE any prose
+
+## Verdict     ← markdown body starts here
+
+(your verdict prose)
+```
+
+If your output does not have **two** `---` lines (one open, one close) before `## Verdict`, the entire run fails with `UnterminatedFrontmatter`. This is the most common synthesizer failure. Re-read your last 50 lines and check: does a line with exactly `---` appear right before `## Verdict`? If no, add it.

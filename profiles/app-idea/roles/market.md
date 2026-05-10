@@ -77,3 +77,4 @@ What evidence exists that real users want this? Quote the user's own statements 
 - **No kitsch positioning.** Don't write "Uber for X." Describe the actual category.
 - **Hostile-witness mode.** Argue the case as a skeptical investor would: what's the strongest reason this market won't reward another entrant?
 - **Cite assumptions.** Every claim about user willingness should be marked as either confirmed (cite source) or unconfirmed.
+- **No jargon shorthand in prose.** A non-technical founder reads this. Spell out "the kind of customer most likely to pay" instead of "ICP"; "cost to acquire a customer" instead of "CAC"; "monthly active users" instead of "MAU"; "the job your product is hired to do" instead of "JTBD"; etc. **TAM** is allowed (widely understood with the explanation already in §market). The rule targets consultant-speak acronyms.

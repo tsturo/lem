@@ -4,6 +4,7 @@ import { registerAllHandlers } from './ipc-register'
 import { registerClaudeHandlers } from './claude-ipc'
 import { LibraryDB } from './library-db'
 import { registerLibraryHandlers } from './library-ipc'
+import { scanWorkspaces } from './workspace-scanner'
 import { WorkspaceReader } from './workspace-reader'
 import { registerWorkspaceHandlers } from './workspace-ipc'
 
@@ -61,6 +62,18 @@ app.whenReady().then(() => {
   registerClaudeHandlers(ipcMain)
   registerLibraryHandlers(ipcMain, db)
   registerWorkspaceHandlers(ipcMain, workspaceReader)
+
+  // Populate library from on-disk workspaces (CLI runs, crashed runs, etc.).
+  // This makes ALL past runs visible regardless of how they were started.
+  try {
+    const imported = scanWorkspaces(db)
+    if (imported > 0) {
+      console.log(`[lem] Imported ${imported} workspace(s) into library`)
+    }
+  } catch (err) {
+    console.error('[lem] Workspace scan failed:', err)
+  }
+
   createWindow()
 
   app.on('activate', () => {

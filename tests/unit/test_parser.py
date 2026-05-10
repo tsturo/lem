@@ -111,20 +111,30 @@ def test_malformed_yaml_inline() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_unterminated_raises() -> None:
-    with pytest.raises(UnterminatedFrontmatter):
+def test_missing_closing_fence_treats_remainder_as_yaml() -> None:
+    # The synthesizer (Opus) sometimes omits the closing ---, producing pure
+    # frontmatter files with no body. Parser is tolerant: treat the whole
+    # file as YAML frontmatter rather than crashing the run.
+    parsed = parse("---\nname: foo\nrecommendation: build\n")
+    assert parsed.frontmatter == {"name": "foo", "recommendation": "build"}
+    assert parsed.body == ""
+
+
+def test_missing_closing_fence_with_body_text_raises_yaml_error() -> None:
+    # The fixture has YAML keys followed by a prose line (legacy "forgot the
+    # close" case). Since we now try to YAML-parse everything after the open,
+    # the prose causes a YAML syntax error — which is the right surfacing.
+    from lem.schema.parser import MalformedYAML
+    with pytest.raises(MalformedYAML):
         parse_file(FIXTURES / "unterminated.md")
 
 
-def test_unterminated_inline() -> None:
-    with pytest.raises(UnterminatedFrontmatter):
-        parse("---\nname: foo\n")
-
-
-def test_unterminated_has_line_info() -> None:
-    with pytest.raises(UnterminatedFrontmatter) as exc_info:
-        parse("---\nname: foo\n")
-    assert exc_info.value.line == 1
+def test_missing_fence_with_invalid_yaml_still_raises() -> None:
+    # If the implicit "all-frontmatter" content isn't valid YAML, surface that
+    # as a parse error rather than swallowing it.
+    from lem.schema.parser import MalformedYAML
+    with pytest.raises(MalformedYAML):
+        parse("---\nname: : :\nbroken\n")
 
 
 def test_indented_fence_treated_as_fence() -> None:
@@ -264,9 +274,12 @@ def test_duplicate_h2_last_wins() -> None:
 
 
 def test_parse_file_error_includes_path(tmp_path: Path) -> None:
+    # Use a YAML-syntax-error to trigger the path-prefix code path now that
+    # missing-closing-fence is tolerated rather than rejected.
     bad_file = tmp_path / "broken.md"
-    bad_file.write_text("---\nname: foo\n", encoding="utf-8")
-    with pytest.raises(UnterminatedFrontmatter, match="broken.md"):
+    bad_file.write_text("---\nname: : :\n---\n", encoding="utf-8")
+    from lem.schema.parser import MalformedYAML
+    with pytest.raises(MalformedYAML, match="broken.md"):
         parse_file(bad_file)
 
 

@@ -16,6 +16,7 @@ export interface LibraryItem {
   idea: string
   verdict: Verdict | null
   status: RunStatus
+  workspacePath: string
   createdAt: string
   updatedAt: string
 }
@@ -26,6 +27,7 @@ export interface RunRow {
   verdict: Verdict | null
   status: RunStatus
   group: RunGroup
+  workspacePath: string
   createdAt: string
   updatedAt: string
 }

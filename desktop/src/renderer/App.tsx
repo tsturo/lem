@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AppShell } from '@/components/AppShell'
 import { BrandMark } from '@/components/BrandMark'
+import { FirstRunWizard } from '@/components/FirstRunWizard'
 import { Sidebar } from '@/components/Sidebar'
 import { Topbar } from '@/components/Topbar'
 import { IntakeInput } from '@/screens/IntakeInput'
@@ -168,6 +169,23 @@ function ErrorBanner({ message }: { message: string }) {
 export default function App() {
   const claudePath = useSettings(s => s.claudePath)
   const loadSettings = useSettings(s => s.load)
+  const [detectionState, setDetectionState] = useState<'pending' | 'found' | 'missing'>('pending')
+
+  const detectClaude = (): void => {
+    setDetectionState('pending')
+    window.lem.claude.detect().then(path => {
+      if (path) {
+        useSettings.setState({ claudePath: path })
+        setDetectionState('found')
+      } else {
+        setDetectionState('missing')
+      }
+    }).catch(() => setDetectionState('missing'))
+  }
+
+  useEffect(() => {
+    detectClaude()
+  }, [])
 
   const initRun       = useRuntime(s => s.initRun)
   const onPhaseStart  = useRuntime(s => s.onPhaseStart)
@@ -243,7 +261,7 @@ export default function App() {
     return off
   }, [onRoleDone])
 
-  if (claudePath === undefined) {
+  if (detectionState === 'pending') {
     return (
       <div
         style={{
@@ -256,6 +274,10 @@ export default function App() {
         <BrandMark size={48} className="animate-t-pulse" />
       </div>
     )
+  }
+
+  if (detectionState === 'missing') {
+    return <FirstRunWizard variant="not-found" onRetry={detectClaude} />
   }
 
   async function handleStartAnalysis() {
@@ -374,16 +396,21 @@ export default function App() {
       case 'brief': {
         const item = libraryItems.find(r => r.runId === activeId)
         if (!item) return null
+        const verdictLabel = item.verdict === 'build' ? 'Build'
+          : item.verdict === 'skip' ? "Don't build"
+          : item.verdict === 'unsure' ? 'Insufficient info'
+          : '—'
         return (
           <Brief
             idea={item.idea}
             verdict={item.verdict ?? 'unsure'}
+            workspacePath={item.workspacePath}
             tabs={[
               { id: 'exec', label: 'Executive summary', content: '' },
               { id: 'mvp', label: 'MVP plan', content: '' },
               { id: 'risks', label: 'Risks & rejected', content: '' },
             ]}
-            calloutStats={{ recommendation: item.verdict ?? 'unsure', confidence: '—', firstMilestone: '—' }}
+            calloutStats={{ recommendation: verdictLabel, confidence: '—', firstMilestone: '—' }}
             signalPills={[]}
             meta={{ version: '0.1.0', phases: 11, specialists: 3, date: item.createdAt.split('T')[0] ?? '—' }}
             onRefineAgain={handleNewIdea}
@@ -419,13 +446,14 @@ export default function App() {
 
   const sidebarItems = libraryItems.length > 0
     ? libraryItems.map(item => ({
-        runId:     item.runId,
-        idea:      item.idea,
-        verdict:   item.verdict,
-        status:    item.status,
-        group:     (item.status === 'running' ? 'active' : 'done') as 'active' | 'done' | 'archive',
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
+        runId:         item.runId,
+        idea:          item.idea,
+        verdict:       item.verdict,
+        status:        item.status,
+        group:         (item.status === 'running' ? 'active' : 'done') as 'active' | 'done' | 'archive',
+        workspacePath: item.workspacePath,
+        createdAt:     item.createdAt,
+        updatedAt:     item.updatedAt,
       }))
     : []
 
