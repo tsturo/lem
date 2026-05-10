@@ -107,6 +107,8 @@ The keys below feed the deliverable templates. Group them by deliverable in your
 ### Executive summary
 
 - `summary_body` — three to six paragraphs. The narrative version of the verdict.
+
+  **Round-2+ (conditional):** IF `meta/iteration-context.md` AND `meta/parent_run_id` are present in the workspace, the first paragraph of `summary_body` MUST (≤80 words): cite the parent run's verdict and confidence level; name the specific change the user added (paraphrase from `meta/iteration-context.md`); state honestly whether and how that change shifted the analysis. If the verdict did not change, say so explicitly. Do NOT create a separate "Round N changes" section — this paragraph is the only genealogy trace. Round-1 runs (no iteration context): omit this paragraph entirely.
 - `assumptions_confirmed` — list of `{description: str}` items the user confirmed.
 - `assumptions_unconfirmed` — list of `{description: str, would_change_verdict_if_false: yes|no|maybe}` items.
 - `market` — dict with these keys:
