@@ -6,6 +6,7 @@ import { join, resolve } from 'path'
 import { tmpdir } from 'os'
 
 const IDEA = 'a calendar app for parents and kids'
+const STUB_IDEA_ID = 'stub-idea-001'
 const STUB_RUN_ID = 'stub-completed-001'
 const SCREENSHOT_DIR = resolve(__dirname, '..', '..', 'screenshots')
 const APP_MAIN = resolve(__dirname, '..', '..', 'out', 'main', 'index.js')
@@ -16,26 +17,48 @@ function createTestUserDataDir(): string {
   // Pre-seed settings.json so the app skips the loading-spinner check on claudePath
   writeFileSync(join(dir, 'settings.json'), JSON.stringify({ theme: 'auto', claudePath: '/usr/bin/env' }))
 
-  // Pre-seed library.db with a completed 'build' run so the Brief view is reachable.
+  // Pre-seed library.db with a completed 'build' run linked to an idea row.
+  // The Sidebar now renders ideas at top level and resolves rounds via the ideas table,
+  // so both the ideas and runs tables must be populated and linked.
   // Uses node:sqlite (built-in, no native ABI) so this setup code works regardless of
   // whether better-sqlite3 is compiled for Electron or host Node.js.
   const db = new DatabaseSync(join(dir, 'library.db'))
   db.exec('PRAGMA journal_mode = WAL')
   db.exec(`
+    CREATE TABLE IF NOT EXISTS ideas (
+      id          TEXT PRIMARY KEY,
+      title       TEXT NOT NULL,
+      created_at  INTEGER NOT NULL
+    )
+  `)
+  db.exec(`
     CREATE TABLE IF NOT EXISTS runs (
-      run_id    TEXT PRIMARY KEY,
-      idea      TEXT NOT NULL,
-      status    TEXT NOT NULL,
-      verdict   TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      run_id        TEXT PRIMARY KEY,
+      idea          TEXT NOT NULL,
+      status        TEXT NOT NULL,
+      verdict       TEXT,
+      workspace_path TEXT NOT NULL DEFAULT '',
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL,
+      idea_id       TEXT REFERENCES ideas(id),
+      parent_run_id TEXT REFERENCES runs(run_id),
+      branch_label  TEXT,
+      round_depth   INTEGER NOT NULL DEFAULT 1
     )
   `)
   db.exec('CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs (created_at DESC)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runs_idea_id ON runs (idea_id)')
   const now = new Date().toISOString()
+  const ideaCreatedAt = Math.floor(Date.now() / 1000)
   db.prepare(
-    'INSERT INTO runs (run_id, idea, status, verdict, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-  ).run(STUB_RUN_ID, IDEA, 'completed', 'build', now, now)
+    'INSERT INTO ideas (id, title, created_at) VALUES (?, ?, ?)',
+  ).run(STUB_IDEA_ID, IDEA, ideaCreatedAt)
+  db.prepare(
+    `INSERT INTO runs
+       (run_id, idea, status, verdict, workspace_path, created_at, updated_at,
+        idea_id, parent_run_id, branch_label, round_depth)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(STUB_RUN_ID, IDEA, 'completed', 'build', '', now, now, STUB_IDEA_ID, null, null, 1)
   db.close()
 
   return dir
