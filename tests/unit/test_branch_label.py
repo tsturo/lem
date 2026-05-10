@@ -63,3 +63,18 @@ def test_cleanup_whitespace_and_newlines(monkeypatch: pytest.MonkeyPatch) -> Non
         result = extract_branch_label("make it mobile first with comments and more stuff")
 
     assert result == "mobile-first-with-comments"
+
+
+def test_garbage_output_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LEM_STUB_MODE", raising=False)
+
+    def fake_invoke(inv: object, system_prompt: object, allowed_tools: object) -> WorkerResult:
+        from lem.types import WorkerInvocation
+        assert isinstance(inv, WorkerInvocation)
+        inv.output_path.parent.mkdir(parents=True, exist_ok=True)
+        inv.output_path.write_text("!!!", encoding="utf-8")
+        return _make_result(output_path=inv.output_path)
+
+    with patch("lem.branch_label.cli_worker.invoke", side_effect=fake_invoke):
+        with pytest.raises(BranchLabelExtractionError):
+            extract_branch_label("make it mobile first")

@@ -63,7 +63,10 @@ def extract_branch_label(context_text: str) -> str:
             raise BranchLabelExtractionError("claude produced no output")
 
         raw = output_path.read_text(encoding="utf-8")
-        return _clean_label(raw)
+        label = _clean_label(raw)
+        if not label:
+            raise BranchLabelExtractionError("claude output cleaned to empty label")
+        return label
 
 
 def _clean_label(raw: str) -> str:
