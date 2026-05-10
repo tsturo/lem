@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Idea, RunRow, RunGroup, RunStatus } from '../../shared/types'
+import type { Idea, RunRow, RunGroup, RunStatus, Verdict } from '../../shared/types'
 import { StatusDot } from './StatusDot'
 
 const GROUP_LABEL: Record<RunGroup, string> = {
@@ -10,7 +10,7 @@ const GROUP_LABEL: Record<RunGroup, string> = {
 
 const GROUP_ORDER: RunGroup[] = ['active', 'done', 'archive']
 
-const VERDICT_LABEL: Record<string, string> = {
+const VERDICT_LABEL: Record<Verdict, string> = {
   build: 'Build', skip: 'Skip', unsure: '?',
 }
 
