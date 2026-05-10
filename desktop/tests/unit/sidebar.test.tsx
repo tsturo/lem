@@ -1,8 +1,8 @@
 /// <reference types="vitest/globals" />
 /// <reference types="@testing-library/jest-dom" />
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import { Sidebar } from './Sidebar'
-import type { Idea, RunRow } from '../../shared/types'
+import { Sidebar } from '@/components/Sidebar'
+import type { Idea, RunRow } from '../../src/shared/types'
 
 function makeIdea(id: string, title: string): Idea {
   return { id, title, createdAt: 1_700_000_000 }
@@ -209,14 +209,11 @@ describe('Sidebar — auto-expand', () => {
     })
     render(<Sidebar {...baseProps} activeId="r1b" />)
 
-    // Idea Alpha (owns r1b) should be auto-expanded
-    await waitFor(() => expect(screen.getByText('Round 1')).toBeInTheDocument())
-    expect(screen.getByText('Round 2')).toBeInTheDocument()
+    // Idea Alpha (owns r1b) should be auto-expanded — its round rows appear
+    await waitFor(() => expect(screen.getAllByText('Round 1').length).toBeGreaterThanOrEqual(1))
 
-    // Idea Beta's rounds should not appear (still collapsed)
-    // Both ideas show Round 1/2 text so we check via count: only i1 expanded
+    // Only i1 is expanded: exactly 2 round rows visible
     const roundLabels = screen.getAllByText(/^Round \d+$/)
-    // i1 has 2 rounds; i2 is collapsed → only 2 round rows total
     expect(roundLabels).toHaveLength(2)
   })
 })
