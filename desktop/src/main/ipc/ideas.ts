@@ -45,7 +45,15 @@ function validateRefineRequest(value: unknown): RefineRequest {
     validateId(req['parentRunId'], 'parentRunId')
   }
   if (req['branchLabel'] !== undefined) {
-    validateLabel(req['branchLabel'], 'branchLabel')
+    // RefineRequest accepts '' as a meaningful signal ("continue mode, use round-{N}",
+    // no extractor) per spec Decision 9. validateLabel (used by setBranchLabel) rejects
+    // empty strings, so we inline the relevant checks here without that constraint.
+    const bl = req['branchLabel']
+    if (typeof bl !== 'string') throw new Error('invalid branchLabel: must be string')
+    if (bl.length > 64) throw new Error('invalid branchLabel: must be ≤64 chars')
+    if (bl.length > 0 && !ID_RE.test(bl)) {
+      throw new Error('invalid branchLabel: must match /^[A-Za-z0-9_-]+$/ when non-empty')
+    }
   }
   if (req['contextText'] !== undefined) {
     if (typeof req['contextText'] !== 'string' || req['contextText'].length > 8000) {
@@ -89,12 +97,17 @@ export function registerIdeasHandlers(
       if (process.env['LEM_DESKTOP_STUB_RUN'] === '1' && validated.parentRunId) {
         const now = new Date().toISOString()
         const parent = db.getRunById(validated.parentRunId)
-        // Branch alternative = sibling of current round (same parent, same depth)
-        const siblingParentId = parent?.parentRunId ?? null
-        const siblingDepth    = parent?.roundDepth ?? 2
+        // Continue mode (branchLabel === '') → new round is a CHILD of current
+        //   (parent_run_id = current.runId, depth = current.depth + 1, label = round-{N}).
+        // Branch mode (branchLabel non-empty or undefined) → new round is a SIBLING of
+        //   current (same parent_run_id, same depth, label = supplied or stub-label).
+        const isContinue      = validated.branchLabel === ''
+        const newParentRunId  = isContinue ? validated.parentRunId : (parent?.parentRunId ?? null)
+        const newDepth        = isContinue ? (parent?.roundDepth ?? 1) + 1 : (parent?.roundDepth ?? 2)
         const ideaId          = parent?.ideaId ?? ''
-        // When no label supplied, mirror branch_label.py stub value
-        const branchLabel = validated.branchLabel ?? 'stub-label'
+        const branchLabel     = isContinue
+          ? `round-${newDepth}`
+          : (validated.branchLabel ?? 'stub-label')
         const runId = `run-stub-${Date.now()}`
 
         db.upsert({
@@ -103,8 +116,8 @@ export function registerIdeasHandlers(
           createdAt: now, updatedAt: now,
         })
         db.linkRunToIdea(runId, {
-          ideaId, parentRunId: siblingParentId,
-          branchLabel, roundDepth: siblingDepth,
+          ideaId, parentRunId: newParentRunId,
+          branchLabel, roundDepth: newDepth,
         })
 
         const win = BrowserWindow.getAllWindows()[0] ?? null
