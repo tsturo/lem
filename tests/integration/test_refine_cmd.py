@@ -341,3 +341,70 @@ def test_attach_does_not_exit_69_on_completed(runner: CliRunner, tmp_path: Path)
              "--skip-intake", "--attach"],
         )
     assert result.exit_code == 0
+
+
+def test_round2_flags_reach_orchestrator_config(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """--parent-run-id, --branch-label, and --iteration-context-file are threaded
+    into OrchestratorConfig."""
+    ctx_file = tmp_path / "context.md"
+    ctx_file.write_text("what changed")
+    fake_state = MagicMock()
+    fake_state.status = "completed"
+    fake_state.run_id = "test-run"
+    fake_state.cost_so_far = 0.0
+    captured_config: list[Any] = []
+
+    def fake_orch(workspace_path: Any, profile: Any, config: Any) -> Any:
+        captured_config.append(config)
+        return fake_state
+
+    with patch("lem.commands.refine.run_intake") as mock_intake, \
+         patch("lem.commands.refine.run_orchestrator", side_effect=fake_orch):
+        mock_intake.return_value = MagicMock()
+        result = runner.invoke(
+            app,
+            [
+                "refine", "an idea",
+                "--workspace", str(tmp_path),
+                "--skip-intake", "--attach",
+                "--parent-run-id", "run-abc",
+                "--branch-label", "faster onboarding flow",
+                "--iteration-context-file", str(ctx_file),
+            ],
+        )
+    assert result.exit_code == 0, result.output
+    assert len(captured_config) == 1
+    cfg = captured_config[0]
+    assert cfg.parent_run_id == "run-abc"
+    assert cfg.branch_label == "faster onboarding flow"
+    assert cfg.iteration_context_file == ctx_file
+
+
+def test_round2_flags_default_to_none(runner: CliRunner, tmp_path: Path) -> None:
+    """When round-2 flags are not supplied, all three default to None."""
+    fake_state = MagicMock()
+    fake_state.status = "completed"
+    fake_state.run_id = "test-run"
+    fake_state.cost_so_far = 0.0
+    captured_config: list[Any] = []
+
+    def fake_orch(workspace_path: Any, profile: Any, config: Any) -> Any:
+        captured_config.append(config)
+        return fake_state
+
+    with patch("lem.commands.refine.run_intake") as mock_intake, \
+         patch("lem.commands.refine.run_orchestrator", side_effect=fake_orch):
+        mock_intake.return_value = MagicMock()
+        result = runner.invoke(
+            app,
+            ["refine", "an idea", "--workspace", str(tmp_path),
+             "--skip-intake", "--attach"],
+        )
+    assert result.exit_code == 0, result.output
+    assert len(captured_config) == 1
+    cfg = captured_config[0]
+    assert cfg.parent_run_id is None
+    assert cfg.branch_label is None
+    assert cfg.iteration_context_file is None
