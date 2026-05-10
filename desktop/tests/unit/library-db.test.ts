@@ -115,6 +115,92 @@ describe('LibraryDB', () => {
     expect(items).toHaveLength(100)
   })
 
+  describe('ideas + DAG methods (LEM-44)', () => {
+    it('createIdea + listIdeas roundtrip — 3 ideas returned DESC by createdAt', () => {
+      const db = openDb()
+      const base = Date.now()
+
+      db.createIdea({ id: 'idea-1', title: 'First',  createdAt: base + 1 })
+      db.createIdea({ id: 'idea-2', title: 'Second', createdAt: base + 3 })
+      db.createIdea({ id: 'idea-3', title: 'Third',  createdAt: base + 2 })
+
+      const ideas = db.listIdeas()
+      expect(ideas).toHaveLength(3)
+      expect(ideas.map(i => i.id)).toEqual(['idea-2', 'idea-3', 'idea-1'])
+    })
+
+    it('createIdea throws on duplicate id', () => {
+      const db = openDb()
+      db.createIdea({ id: 'dup', title: 'Original', createdAt: Date.now() })
+      expect(() => db.createIdea({ id: 'dup', title: 'Duplicate', createdAt: Date.now() })).toThrow()
+    })
+
+    it('linkRunToIdea: getRoundsForIdea returns the run under the right idea_id', () => {
+      const db = openDb()
+      db.createIdea({ id: 'idea-x', title: 'X', createdAt: Date.now() })
+      db.upsert(makeRow({ runId: 'run-link', status: 'running' }))
+      db.linkRunToIdea('run-link', { ideaId: 'idea-x', parentRunId: null, branchLabel: null, roundDepth: 1 })
+
+      const rounds = db.getRoundsForIdea('idea-x')
+      expect(rounds).toHaveLength(1)
+      expect(rounds[0].runId).toBe('run-link')
+      expect(rounds[0].ideaId).toBe('idea-x')
+    })
+
+    it('getRoundsForIdea sorts by round_depth ASC then created_at ASC', () => {
+      const db = openDb()
+      const base = Date.now()
+      db.createIdea({ id: 'idea-y', title: 'Y', createdAt: base })
+
+      db.upsert(makeRow({ runId: 'r-d2-early', createdAt: new Date(base + 1).toISOString() }))
+      db.upsert(makeRow({ runId: 'r-d1',       createdAt: new Date(base + 2).toISOString() }))
+      db.upsert(makeRow({ runId: 'r-d2-late',  createdAt: new Date(base + 3).toISOString() }))
+
+      db.linkRunToIdea('r-d2-early', { ideaId: 'idea-y', parentRunId: null, branchLabel: null, roundDepth: 2 })
+      db.linkRunToIdea('r-d1',       { ideaId: 'idea-y', parentRunId: null, branchLabel: null, roundDepth: 1 })
+      db.linkRunToIdea('r-d2-late',  { ideaId: 'idea-y', parentRunId: null, branchLabel: null, roundDepth: 2 })
+
+      const rounds = db.getRoundsForIdea('idea-y')
+      expect(rounds.map(r => r.runId)).toEqual(['r-d1', 'r-d2-early', 'r-d2-late'])
+    })
+
+    it('renameIdea changes the title', () => {
+      const db = openDb()
+      db.createIdea({ id: 'idea-r', title: 'Old', createdAt: Date.now() })
+      db.renameIdea('idea-r', 'New')
+      const ideas = db.listIdeas()
+      expect(ideas[0].title).toBe('New')
+    })
+
+    it('renameIdea throws on empty title', () => {
+      const db = openDb()
+      db.createIdea({ id: 'idea-e', title: 'Valid', createdAt: Date.now() })
+      expect(() => db.renameIdea('idea-e', '')).toThrow()
+    })
+
+    it('renameIdea throws on title longer than 200 chars', () => {
+      const db = openDb()
+      db.createIdea({ id: 'idea-long', title: 'Valid', createdAt: Date.now() })
+      expect(() => db.renameIdea('idea-long', 'x'.repeat(201))).toThrow()
+    })
+
+    it('setBranchLabel sets and clears the label', () => {
+      const db = openDb()
+      db.upsert(makeRow({ runId: 'run-bl' }))
+      db.setBranchLabel('run-bl', 'foo')
+
+      db.createIdea({ id: 'idea-bl', title: 'BL', createdAt: Date.now() })
+      db.linkRunToIdea('run-bl', { ideaId: 'idea-bl', parentRunId: null, branchLabel: 'foo', roundDepth: 1 })
+
+      const rounds = db.getRoundsForIdea('idea-bl')
+      expect(rounds[0].branchLabel).toBe('foo')
+
+      db.setBranchLabel('run-bl', null)
+      const rounds2 = db.getRoundsForIdea('idea-bl')
+      expect(rounds2[0].branchLabel).toBeNull()
+    })
+  })
+
   describe('schema migrations (LEM-38)', () => {
     it('fresh DB has ideas table, 4 new run columns, and both indexes', () => {
       const { path, lib } = makeTmpDb()

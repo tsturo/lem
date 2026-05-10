@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import type { RunRow, LibraryItem } from '../shared/types'
+import type { RunRow, RunGroup, LibraryItem, Idea } from '../shared/types'
 
 const CREATE_RUNS_TABLE = `
   CREATE TABLE IF NOT EXISTS runs (
@@ -42,6 +42,39 @@ interface DbRow {
   workspace_path: string
   created_at: string
   updated_at: string
+  idea_id: string | null
+  parent_run_id: string | null
+  branch_label: string | null
+  round_depth: number
+}
+
+interface IdeaDbRow {
+  id: string
+  title: string
+  created_at: number
+}
+
+function statusToGroup(status: string): RunGroup {
+  if (status === 'running') return 'active'
+  if (status === 'completed') return 'done'
+  return 'archive'
+}
+
+function rowToRunRow(r: DbRow): RunRow {
+  return {
+    runId: r.run_id,
+    idea: r.idea,
+    verdict: r.verdict as RunRow['verdict'],
+    status: r.status as RunRow['status'],
+    group: statusToGroup(r.status),
+    workspacePath: r.workspace_path,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    ideaId: r.idea_id ?? undefined,
+    parentRunId: r.parent_run_id,
+    branchLabel: r.branch_label,
+    roundDepth: r.round_depth,
+  }
 }
 
 export class LibraryDB {
@@ -106,6 +139,58 @@ export class LibraryDB {
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }))
+  }
+
+  createIdea(args: { id: string; title: string; createdAt: number }): void {
+    this.db
+      .prepare(`INSERT INTO ideas (id, title, created_at) VALUES (?, ?, ?)`)
+      .run(args.id, args.title, args.createdAt)
+  }
+
+  listIdeas(): Idea[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM ideas ORDER BY created_at DESC`)
+      .all() as IdeaDbRow[]
+
+    return rows.map(r => ({ id: r.id, title: r.title, createdAt: r.created_at }))
+  }
+
+  getRoundsForIdea(ideaId: string): RunRow[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM runs WHERE idea_id = ? ORDER BY round_depth ASC, created_at ASC`)
+      .all(ideaId) as DbRow[]
+
+    return rows.map(rowToRunRow)
+  }
+
+  getRunDag(ideaId: string): RunRow[] {
+    return this.getRoundsForIdea(ideaId)
+  }
+
+  renameIdea(ideaId: string, newTitle: string): void {
+    if (newTitle.length < 1 || newTitle.length > 200) {
+      throw new Error(`title must be 1–200 characters, got ${newTitle.length}`)
+    }
+    this.db
+      .prepare(`UPDATE ideas SET title = ? WHERE id = ?`)
+      .run(newTitle, ideaId)
+  }
+
+  setBranchLabel(runId: string, label: string | null): void {
+    this.db
+      .prepare(`UPDATE runs SET branch_label = ? WHERE run_id = ?`)
+      .run(label, runId)
+  }
+
+  linkRunToIdea(
+    runId: string,
+    args: { ideaId: string; parentRunId: string | null; branchLabel: string | null; roundDepth: number },
+  ): void {
+    this.db
+      .prepare(
+        `UPDATE runs SET idea_id = ?, parent_run_id = ?, branch_label = ?, round_depth = ? WHERE run_id = ?`,
+      )
+      .run(args.ideaId, args.parentRunId, args.branchLabel, args.roundDepth, runId)
   }
 
   close(): void {
