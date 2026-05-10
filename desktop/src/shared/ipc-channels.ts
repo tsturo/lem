@@ -12,4 +12,10 @@ export const IPC = {
   WORKSPACE_READ_BRIEF: 'workspace:read-brief',
   SHELL_OPEN_EXTERNAL: 'shell:open-external',
   SHELL_OPEN_FILE: 'shell:open-file',
+  IDEAS_LIST: 'ideas:list',
+  IDEAS_GET_ROUNDS: 'ideas:get-rounds',
+  IDEAS_GET_DAG: 'ideas:get-dag',
+  IDEAS_RENAME: 'ideas:rename',
+  RUNS_REFINE: 'runs:refine',
+  RUNS_SET_BRANCH_LABEL: 'runs:set-branch-label',
 } as const

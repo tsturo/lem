@@ -1,12 +1,13 @@
 import { app, BrowserWindow, shell, ipcMain } from 'electron'
 import { join } from 'path'
-import { registerAllHandlers } from './ipc-register'
+import { registerAllHandlers, bridge } from './ipc-register'
 import { registerClaudeHandlers } from './claude-ipc'
 import { LibraryDB } from './library-db'
 import { registerLibraryHandlers } from './library-ipc'
 import { scanWorkspaces } from './workspace-scanner'
 import { WorkspaceReader } from './workspace-reader'
 import { registerWorkspaceHandlers } from './workspace-ipc'
+import { registerIdeasHandlers } from './ipc/ideas'
 
 const db = new LibraryDB(join(app.getPath('userData'), 'library.db'))
 const workspaceReader = new WorkspaceReader()
@@ -62,6 +63,7 @@ app.whenReady().then(() => {
   registerClaudeHandlers(ipcMain)
   registerLibraryHandlers(ipcMain, db)
   registerWorkspaceHandlers(ipcMain, workspaceReader)
+  registerIdeasHandlers(ipcMain, { db, bridge })
 
   // Populate library from on-disk workspaces (CLI runs, crashed runs, etc.).
   // This makes ALL past runs visible regardless of how they were started.

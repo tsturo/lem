@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc-channels'
-import type { Settings, LibraryItem } from '../shared/types'
+import type { Settings, LibraryItem, Idea, RunRow, RefineRequest, RefineResponse } from '../shared/types'
 import type { BriefData } from '../main/workspace-reader'
 
 contextBridge.exposeInMainWorld('lem', {
@@ -20,6 +20,13 @@ contextBridge.exposeInMainWorld('lem', {
   library: {
     list: (): Promise<LibraryItem[]> => ipcRenderer.invoke(IPC.LIBRARY_LIST),
   },
+  ideas: {
+    list: (): Promise<Idea[]> => ipcRenderer.invoke(IPC.IDEAS_LIST),
+    getRounds: (ideaId: string): Promise<RunRow[]> => ipcRenderer.invoke(IPC.IDEAS_GET_ROUNDS, ideaId),
+    getDag: (ideaId: string): Promise<RunRow[]> => ipcRenderer.invoke(IPC.IDEAS_GET_DAG, ideaId),
+    rename: (ideaId: string, newTitle: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.IDEAS_RENAME, ideaId, newTitle),
+  },
   run: {
     start(args: { idea: string; stub?: boolean; replaySpeed?: number }): Promise<string> {
       return ipcRenderer.invoke(IPC.RUN_START, args)
@@ -37,6 +44,9 @@ contextBridge.exposeInMainWorld('lem', {
       ipcRenderer.on(IPC.RUN_LOG, listener)
       return () => ipcRenderer.removeListener(IPC.RUN_LOG, listener)
     },
+    refine: (req: RefineRequest): Promise<RefineResponse> => ipcRenderer.invoke(IPC.RUNS_REFINE, req),
+    setBranchLabel: (runId: string, label: string | null): Promise<void> =>
+      ipcRenderer.invoke(IPC.RUNS_SET_BRANCH_LABEL, runId, label),
   },
   workspace: {
     readBrief: (workspacePath: string): Promise<BriefData> =>
