@@ -72,6 +72,9 @@ class OrchestratorConfig:
     # deliverables. Members map to keys in profile.flag_gated_deliverables
     # (e.g. "--with-pitch", "--with-roadmap", "--with-techstack").
     requested_flags: frozenset[str] = frozenset()
+    parent_run_id: str | None = None
+    branch_label: str | None = None
+    iteration_context_file: Path | None = None
 
 
 def run_orchestrator(
