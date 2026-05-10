@@ -48,6 +48,11 @@ def _find_dot_lem_upward() -> Path | None:
     return None
 
 
+def run_dir_by_id(run_id: str) -> Path:
+    """Return the canonical path for a run directory given its run_id."""
+    return _lem_runs_dir() / run_id
+
+
 def resolve_workspace(
     *,
     name: str | None = None,

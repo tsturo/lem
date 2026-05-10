@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -12,6 +14,7 @@ from typing import Literal, NamedTuple
 
 import jinja2
 
+from lem.branch_label import BranchLabelExtractionError, extract_branch_label
 from lem.control import ControlAction, clear_control, read_control
 from lem.failure import breaker
 from lem.failure.ceiling import (
@@ -21,9 +24,11 @@ from lem.failure.ceiling import (
 )
 from lem.hooks import fire_on_complete, fire_on_error, load_hook_config, post_webhook
 from lem.notify import notify
+from lem.paths import run_dir_by_id
 from lem.phases import PHASES, archive_pruner_losers
 from lem.post_synthesis import post_synthesize_verdict_check
 from lem.render.deliverables import render_deliverables
+from lem.schema.parser import parse_file
 from lem.state.cost import aggregate_phase, run_total
 from lem.state.events import write_event
 from lem.state.log import append_log
@@ -38,6 +43,29 @@ from lem.types import (
     WorkerResult,
 )
 from lem.workers.dispatch import dispatch_worker
+
+
+class OrchestratorError(Exception):
+    """Raised for misconfigured or invalid orchestrator invocations."""
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    data = text.encode("utf-8")
+    dir_ = path.parent
+    dir_.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=dir_, suffix=".tmp")
+    try:
+        try:
+            os.write(fd, data)
+        finally:
+            os.close(fd)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 class ProgressEvent(NamedTuple):
@@ -77,6 +105,121 @@ class OrchestratorConfig:
     iteration_context_file: Path | None = None
 
 
+def _read_iteration_context(config: OrchestratorConfig) -> str:
+    if config.iteration_context_file is None:
+        raise OrchestratorError("iteration_context_file is required for round-2+ runs")
+    path = config.iteration_context_file
+    if not path.exists():
+        raise OrchestratorError(f"iteration_context_file not found: {path}")
+    text = path.read_text(encoding="utf-8")
+    if not text.strip():
+        raise OrchestratorError("iteration_context_file is empty")
+    return text
+
+
+def _read_parent_round_depth(parent_dir: Path) -> int:
+    depth_file = parent_dir / "meta" / "round-depth"
+    if not depth_file.exists():
+        return 1
+    try:
+        return int(depth_file.read_text(encoding="utf-8").strip())
+    except ValueError:
+        return 1
+
+
+def _read_parent_verdict(parent_dir: Path) -> tuple[str, str]:
+    synth_path = parent_dir / "meta" / "synthesis.md"
+    if not synth_path.exists():
+        raise OrchestratorError(f"parent synthesis.md not found: {synth_path}")
+    try:
+        doc = parse_file(synth_path)
+    except Exception as exc:
+        raise OrchestratorError(f"parent synthesis.md is malformed: {exc}") from exc
+    recommendation = str(doc.frontmatter.get("recommendation") or "unknown")
+    confidence = str(doc.frontmatter.get("confidence") or "unknown")
+    return recommendation, confidence
+
+
+def _determine_branch_label(
+    config: OrchestratorConfig, iteration_context: str, round_depth: int
+) -> str:
+    fallback = f"round-{round_depth}"
+    if config.branch_label is None:
+        try:
+            return extract_branch_label(iteration_context)
+        except BranchLabelExtractionError:
+            return fallback
+    if config.branch_label == "":
+        return fallback
+    return config.branch_label
+
+
+def _build_header(
+    round_depth: int,
+    parent_round_depth: int,
+    recommendation: str,
+    confidence: str,
+    iteration_context: str,
+) -> str:
+    lines = iteration_context.strip().splitlines()
+    quoted = "\n".join(f"> {line}" if line else ">" for line in lines)
+    return (
+        f"This is round {round_depth} of refinement on this idea.\n"
+        f"Round {parent_round_depth} (parent) reached verdict:"
+        f" {recommendation} ({confidence}).\n"
+        f"The user has added the following context for this round:\n"
+        f"{quoted}\n"
+        f"\n"
+        f"Your job: actively reconsider this idea given the new context.\n"
+        f"Do NOT defer to the prior verdict. If the new context shifts your\n"
+        f"analysis, say so explicitly.\n"
+    )
+
+
+def _prepend_header_to_idea_md(workspace_path: Path, header: str) -> None:
+    idea_path = workspace_path / "idea.md"
+    existing = idea_path.read_text(encoding="utf-8") if idea_path.exists() else ""
+    _atomic_write_text(idea_path, header + "\n" + existing)
+
+
+def _write_round2_meta(
+    workspace_path: Path,
+    parent_run_id: str,
+    branch_label: str,
+    iteration_context: str,
+    round_depth: int,
+) -> None:
+    meta = workspace_path / "meta"
+    _atomic_write_text(meta / "parent_run_id", parent_run_id)
+    _atomic_write_text(meta / "branch_label", branch_label)
+    _atomic_write_text(meta / "iteration-context.md", iteration_context)
+    _atomic_write_text(meta / "round-depth", str(round_depth))
+
+
+def _setup_round2(workspace_path: Path, config: OrchestratorConfig) -> None:
+    parent_run_id = config.parent_run_id
+    assert parent_run_id is not None  # caller guards
+
+    parent_dir = run_dir_by_id(parent_run_id)
+    if not parent_dir.is_dir():
+        raise OrchestratorError(
+            f"parent run not found: {parent_run_id} (expected at {parent_dir})"
+        )
+
+    iteration_context = _read_iteration_context(config)
+    parent_round_depth = _read_parent_round_depth(parent_dir)
+    round_depth = parent_round_depth + 1
+    recommendation, confidence = _read_parent_verdict(parent_dir)
+    branch_label = _determine_branch_label(config, iteration_context, round_depth)
+    header = _build_header(
+        round_depth, parent_round_depth, recommendation, confidence, iteration_context
+    )
+    _prepend_header_to_idea_md(workspace_path, header)
+    _write_round2_meta(
+        workspace_path, parent_run_id, branch_label, iteration_context, round_depth
+    )
+
+
 def run_orchestrator(
     workspace_path: Path,
     profile: Profile,
@@ -84,6 +227,8 @@ def run_orchestrator(
 ) -> RunState:
     """Run the full pipeline. Returns the final RunState."""
     cfg = config or OrchestratorConfig()
+    if cfg.parent_run_id is not None:
+        _setup_round2(workspace_path, cfg)
     hook_config = load_hook_config(workspace_path)
     state = _initialize_state(workspace_path, profile)
     write_state(state)
