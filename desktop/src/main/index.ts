@@ -1,5 +1,9 @@
 import { app, BrowserWindow, shell, ipcMain, nativeImage } from 'electron'
 import { join } from 'path'
+
+// Override the default "Electron" name for the app menu, About dialog, dock label,
+// and macOS application support paths. Must be called before app is ready.
+app.setName('lem')
 import { registerAllHandlers, bridge } from './ipc-register'
 import { registerClaudeHandlers } from './claude-ipc'
 import { LibraryDB } from './library-db'
