@@ -30,6 +30,27 @@ export interface RunRow {
   workspacePath: string
   createdAt: string
   updatedAt: string
+  ideaId?: string
+  parentRunId?: string | null
+  branchLabel?: string | null
+  roundDepth?: number
+}
+
+export type Idea = {
+  id: string
+  title: string
+  createdAt: number
+}
+
+export type RefineRequest = {
+  idea: string
+  parentRunId?: string
+  branchLabel?: string
+  contextText?: string
+}
+
+export type RefineResponse = {
+  runId: string
 }
 
 export interface ChatMessage {
