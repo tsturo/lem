@@ -119,10 +119,17 @@ export class LibraryDB {
   upsert(row: RunRow): void {
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO runs (run_id, idea, status, verdict, workspace_path, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO runs (run_id, idea, status, verdict, workspace_path, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (run_id) DO UPDATE SET
+           idea = excluded.idea,
+           status = excluded.status,
+           verdict = excluded.verdict,
+           workspace_path = excluded.workspace_path,
+           created_at = excluded.created_at,
+           updated_at = excluded.updated_at`,
       )
-      .run(row.runId, row.idea, row.status, row.verdict ?? null, row.workspacePath, row.createdAt, row.updatedAt)
+      .run(row.runId, row.idea, row.status, row.verdict ?? null, row.workspacePath ?? '', row.createdAt, row.updatedAt)
   }
 
   list(): LibraryItem[] {
@@ -141,6 +148,13 @@ export class LibraryDB {
     }))
   }
 
+  getRunById(runId: string): RunRow | null {
+    const row = this.db
+      .prepare(`SELECT * FROM runs WHERE run_id = ?`)
+      .get(runId) as DbRow | undefined
+    return row ? rowToRunRow(row) : null
+  }
+
   createIdea(args: { id: string; title: string; createdAt: number }): void {
     this.db
       .prepare(`INSERT INTO ideas (id, title, created_at) VALUES (?, ?, ?)`)
@@ -151,7 +165,6 @@ export class LibraryDB {
     const rows = this.db
       .prepare(`SELECT * FROM ideas ORDER BY created_at DESC`)
       .all() as IdeaDbRow[]
-
     return rows.map(r => ({ id: r.id, title: r.title, createdAt: r.created_at }))
   }
 
@@ -159,7 +172,6 @@ export class LibraryDB {
     const rows = this.db
       .prepare(`SELECT * FROM runs WHERE idea_id = ? ORDER BY round_depth ASC, created_at ASC`)
       .all(ideaId) as DbRow[]
-
     return rows.map(rowToRunRow)
   }
 
@@ -191,6 +203,10 @@ export class LibraryDB {
         `UPDATE runs SET idea_id = ?, parent_run_id = ?, branch_label = ?, round_depth = ? WHERE run_id = ?`,
       )
       .run(args.ideaId, args.parentRunId, args.branchLabel, args.roundDepth, runId)
+  }
+
+  runInTransaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)()
   }
 
   close(): void {
