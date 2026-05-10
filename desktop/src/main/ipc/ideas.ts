@@ -1,8 +1,10 @@
+import { BrowserWindow } from 'electron'
 import type { IpcMain } from 'electron'
 import { IPC } from '../../shared/ipc-channels'
 import type { Idea, RunRow, RefineRequest, RefineResponse } from '../../shared/types'
 import type { LibraryDB } from '../library-db'
 import type { OrchestratorBridge } from '../orchestrator-bridge'
+import type { ProgressEvent } from '../../types/lem-events'
 
 const ID_RE = /^[A-Za-z0-9_-]+$/
 
@@ -83,6 +85,50 @@ export function registerIdeasHandlers(
     IPC.RUNS_REFINE,
     async (_event, req: unknown): Promise<RefineResponse> => {
       const validated = validateRefineRequest(req)
+
+      if (process.env['LEM_DESKTOP_STUB_RUN'] === '1' && validated.parentRunId) {
+        const now = new Date().toISOString()
+        const parent = db.getRunById(validated.parentRunId)
+        // Branch alternative = sibling of current round (same parent, same depth)
+        const siblingParentId = parent?.parentRunId ?? null
+        const siblingDepth    = parent?.roundDepth ?? 2
+        const ideaId          = parent?.ideaId ?? ''
+        // When no label supplied, mirror branch_label.py stub value
+        const branchLabel = validated.branchLabel ?? 'stub-label'
+        const runId = `run-stub-${Date.now()}`
+
+        db.upsert({
+          runId, idea: validated.idea, verdict: null,
+          status: 'running', group: 'active', workspacePath: '',
+          createdAt: now, updatedAt: now,
+        })
+        db.linkRunToIdea(runId, {
+          ideaId, parentRunId: siblingParentId,
+          branchLabel, roundDepth: siblingDepth,
+        })
+
+        const win = BrowserWindow.getAllWindows()[0] ?? null
+        const onEvent = (ev: ProgressEvent) => {
+          // Mark completed before forwarding phase 4 so getRounds() sees the final verdict
+          if (ev.kind === 'phase_done' && ev.phase_id === '4') {
+            db.upsert({
+              runId, idea: validated.idea, verdict: 'build',
+              status: 'completed', group: 'done', workspacePath: '',
+              createdAt: now, updatedAt: new Date().toISOString(),
+            })
+          }
+          win?.webContents.send(IPC.RUN_EVENT, ev)
+        }
+        const onExit = () => {
+          bridge.off('event', onEvent)
+          win?.webContents.send(IPC.RUN_EVENT, { kind: 'run_exit', code: 0, signal: null })
+        }
+        bridge.on('event', onEvent)
+        bridge.once('exit', onExit)
+        bridge.start(validated.idea)
+        return { runId }
+      }
+
       const { runId } = await bridge.spawnRefine(validated)
       return { runId }
     },
