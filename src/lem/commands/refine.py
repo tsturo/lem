@@ -70,6 +70,24 @@ def refine(
     ),
     dry_run: bool = typer.Option(False, "--dry-run"),
     open_in: Optional[str] = typer.Option(None, "--open"),
+    parent_run_id: Optional[str] = typer.Option(
+        None,
+        "--parent-run-id",
+        help="Parent run ID. Presence implies round-2+ mode.",
+    ),
+    branch_label: Optional[str] = typer.Option(
+        None,
+        "--branch-label",
+        help="Optional user-supplied label (2-4 words). Only meaningful with --parent-run-id.",
+    ),
+    iteration_context_file: Optional[Path] = typer.Option(
+        None,
+        "--iteration-context-file",
+        help="Path to a file containing the user's 'what has changed' text (UTF-8). Only meaningful with --parent-run-id.",
+        exists=False,
+        dir_okay=False,
+        readable=True,
+    ),
 ) -> None:
     """Refine an idea into investor-grade markdown deliverables."""
     idea = _resolve_idea(idea, from_file)
@@ -118,6 +136,9 @@ def refine(
         webhook_url=webhook,
         requested_flags=frozenset(requested_flags),
         progress_cb=printer.on_event if printer is not None else None,
+        parent_run_id=parent_run_id,
+        branch_label=branch_label,
+        iteration_context_file=iteration_context_file,
     )
 
     if attach:
