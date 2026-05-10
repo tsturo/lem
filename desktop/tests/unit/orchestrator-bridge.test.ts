@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { EventEmitter } from 'events'
 import * as path from 'path'
 import * as fs from 'fs'
+import * as os from 'os'
 
 // ---------------------------------------------------------------------------
 // Mock child_process.spawn before importing the module under test
@@ -284,6 +285,133 @@ describe('OrchestratorBridge', () => {
       expect(exitCalls).toHaveLength(1)
       const info = exitCalls[0] as Record<string, unknown>
       expect(info.stderr as string).toContain('spawn error detail')
+    })
+  })
+
+  describe('spawnRefine', () => {
+    let writeFileSpy: ReturnType<typeof vi.spyOn>
+    let unlinkSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      writeFileSpy = vi.spyOn(fs.promises, 'writeFile').mockResolvedValue(undefined)
+      unlinkSpy = vi.spyOn(fs.promises, 'unlink').mockResolvedValue(undefined)
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('round-1: spawns with --skip-intake --json-events and no extra flags', async () => {
+      const { runId } = await bridge.spawnRefine({ idea: 'test idea' })
+
+      const spawnMock = spawn as ReturnType<typeof vi.fn>
+      expect(spawnMock).toHaveBeenCalledOnce()
+      const args = spawnMock.mock.calls[0][1] as string[]
+      expect(args).toEqual(['refine', 'test idea', '--skip-intake', '--json-events'])
+      expect(runId).toMatch(/^run-\d+$/)
+    })
+
+    it('round-1: ignores branchLabel and contextText if supplied', async () => {
+      await bridge.spawnRefine({ idea: 'test idea', branchLabel: 'x', contextText: 'ctx' })
+
+      const args = (spawn as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[]
+      expect(args).toEqual(['refine', 'test idea', '--skip-intake', '--json-events'])
+      expect(writeFileSpy).not.toHaveBeenCalled()
+    })
+
+    it('round-2 happy path: passes parentRunId, contextFile, and branchLabel flags', async () => {
+      await bridge.spawnRefine({
+        idea: 'test idea',
+        parentRunId: 'run-abc',
+        contextText: 'some context',
+        branchLabel: 'mobile',
+      })
+
+      const args = (spawn as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[]
+      expect(args).toContain('--parent-run-id')
+      expect(args[args.indexOf('--parent-run-id') + 1]).toBe('run-abc')
+      expect(args).toContain('--iteration-context-file')
+      expect(args).toContain('--branch-label')
+      expect(args[args.indexOf('--branch-label') + 1]).toBe('mobile')
+
+      expect(writeFileSpy).toHaveBeenCalledOnce()
+      const [writePath, writeContent, writeEncoding] = writeFileSpy.mock.calls[0] as [string, string, string]
+      expect(writePath).toMatch(/lem-iter-.+\.md$/)
+      expect(writePath.startsWith(os.tmpdir())).toBe(true)
+      expect(writeContent).toBe('some context')
+      expect(writeEncoding).toBe('utf8')
+    })
+
+    it('round-2 with branchLabel undefined: does not pass --branch-label', async () => {
+      await bridge.spawnRefine({
+        idea: 'test idea',
+        parentRunId: 'run-abc',
+        contextText: 'some context',
+      })
+
+      const args = (spawn as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[]
+      expect(args).not.toContain('--branch-label')
+    })
+
+    it('round-2 with branchLabel empty string: passes --branch-label with empty string', async () => {
+      await bridge.spawnRefine({
+        idea: 'test idea',
+        parentRunId: 'run-abc',
+        contextText: 'some context',
+        branchLabel: '',
+      })
+
+      const args = (spawn as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[]
+      const idx = args.indexOf('--branch-label')
+      expect(idx).toBeGreaterThan(-1)
+      expect(args[idx + 1]).toBe('')
+    })
+
+    it('throws if contextText is missing for round-2, no spawn', async () => {
+      await expect(
+        bridge.spawnRefine({ idea: 'test idea', parentRunId: 'run-abc' }),
+      ).rejects.toThrow('contextText required for round-2 runs')
+      expect(spawn).not.toHaveBeenCalled()
+    })
+
+    it('throws if contextText is whitespace-only for round-2, no spawn', async () => {
+      await expect(
+        bridge.spawnRefine({ idea: 'test idea', parentRunId: 'run-abc', contextText: '   ' }),
+      ).rejects.toThrow('contextText required for round-2 runs')
+      expect(spawn).not.toHaveBeenCalled()
+    })
+
+    it('cleans up temp file after child exits successfully', async () => {
+      await bridge.spawnRefine({
+        idea: 'test idea',
+        parentRunId: 'run-abc',
+        contextText: 'context',
+      })
+
+      const tmpPath = (writeFileSpy.mock.calls[0] as string[])[0]
+      mockChild.emit('exit', 0, null)
+      await sleep(10)
+
+      expect(unlinkSpy).toHaveBeenCalledWith(tmpPath)
+    })
+
+    it('cleans up temp file after child emits error', async () => {
+      await bridge.spawnRefine({
+        idea: 'test idea',
+        parentRunId: 'run-abc',
+        contextText: 'context',
+      })
+
+      const tmpPath = (writeFileSpy.mock.calls[0] as string[])[0]
+      mockChild.emit('error', new Error('spawn failed'))
+      await sleep(10)
+
+      expect(unlinkSpy).toHaveBeenCalledWith(tmpPath)
+    })
+
+    it('does not create temp file for round-1 runs', async () => {
+      await bridge.spawnRefine({ idea: 'test idea' })
+      expect(writeFileSpy).not.toHaveBeenCalled()
     })
   })
 

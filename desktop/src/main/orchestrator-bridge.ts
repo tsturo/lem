@@ -1,10 +1,18 @@
 import { EventEmitter } from 'events'
 import { spawn, ChildProcess } from 'child_process'
+import { randomUUID } from 'crypto'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { tailJsonl } from './tail-jsonl'
 import type { LogLine, ProgressEvent } from '../types/lem-events'
+
+export interface RefineRequest {
+  idea: string
+  parentRunId?: string
+  branchLabel?: string
+  contextText?: string
+}
 
 export interface StartOptions {
   stub?: boolean
@@ -52,6 +60,49 @@ export class OrchestratorBridge extends EventEmitter {
     }
 
     return runId
+  }
+
+  async spawnRefine(req: RefineRequest): Promise<{ runId: string; child: ChildProcess }> {
+    const { idea, parentRunId, branchLabel, contextText } = req
+    const runId = `run-${Date.now()}`
+    const args: string[] = ['refine', idea, '--skip-intake', '--json-events']
+    let tmpPath: string | null = null
+
+    if (parentRunId !== undefined) {
+      if (!contextText || !contextText.trim()) {
+        throw new Error('contextText required for round-2 runs')
+      }
+
+      tmpPath = path.join(os.tmpdir(), `lem-iter-${randomUUID()}.md`)
+      await fs.promises.writeFile(tmpPath, contextText, 'utf8')
+
+      args.push('--parent-run-id', parentRunId)
+      args.push('--iteration-context-file', tmpPath)
+
+      if (branchLabel !== undefined) {
+        args.push('--branch-label', branchLabel)
+      }
+    } else {
+      if (branchLabel !== undefined || contextText !== undefined) {
+        console.warn('[orchestrator-bridge] branchLabel/contextText supplied for round-1 run — ignoring')
+      }
+    }
+
+    const child = spawn('lem', args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      detached: false,
+    })
+
+    if (tmpPath !== null) {
+      const captured = tmpPath
+      const cleanup = () => {
+        fs.promises.unlink(captured).catch(() => {})
+      }
+      child.once('exit', cleanup)
+      child.once('error', cleanup)
+    }
+
+    return { runId, child }
   }
 
   cancel(_runId: string): void {
