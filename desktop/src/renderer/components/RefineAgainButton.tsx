@@ -15,6 +15,7 @@ const baseButtonStyle: React.CSSProperties = {
   fontSize:     14,
   fontFamily:   'var(--t-font)',
   fontWeight:   600,
+  cursor:       'pointer',
   transition:   'transform 0.18s, box-shadow 0.18s, opacity 0.18s',
   outline:      'none',
 }
@@ -120,6 +121,8 @@ export function RefineAgainButton({ onContinue, onBranch, disabled = false }: Re
           }}
           onMouseEnter={e => { if (!disabled) e.currentTarget.style.transform = 'translateY(-1px)' }}
           onMouseLeave={e => { e.currentTarget.style.transform = '' }}
+          onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 3px rgba(108, 92, 231, 0.15)' }}
+          onBlur={e => { e.currentTarget.style.boxShadow = '' }}
         >
           Refine again
         </button>
@@ -129,6 +132,7 @@ export function RefineAgainButton({ onContinue, onBranch, disabled = false }: Re
           disabled={disabled}
           aria-haspopup="true"
           aria-expanded={open}
+          aria-label="More options"
           onClick={() => { if (open) setOpen(false); else openMenu() }}
           onKeyDown={handleChevronKeyDown}
           style={{
@@ -139,6 +143,8 @@ export function RefineAgainButton({ onContinue, onBranch, disabled = false }: Re
           }}
           onMouseEnter={e => { if (!disabled) e.currentTarget.style.transform = 'translateY(-1px)' }}
           onMouseLeave={e => { e.currentTarget.style.transform = '' }}
+          onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 3px rgba(108, 92, 231, 0.15)' }}
+          onBlur={e => { e.currentTarget.style.boxShadow = '' }}
         >
           ▾
         </button>
