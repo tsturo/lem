@@ -128,7 +128,7 @@ export function Sidebar({
       }
     }
     void load()
-  }, [])
+  }, [activeId])
 
   function toggleExpand(ideaId: string) {
     setExpandedIds(prev => {
