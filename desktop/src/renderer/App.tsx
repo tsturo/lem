@@ -8,8 +8,9 @@ import { IntakeInput } from '@/screens/IntakeInput'
 import { IntakeChat } from '@/screens/IntakeChat'
 import { Theater } from '@/screens/Theater'
 import { Brief } from '@/screens/Brief'
-import type { ChatMessage } from '../shared/types'
+import type { ChatMessage, RefineRequest, RunRow, Verdict } from '../shared/types'
 import type { LogLine, ProgressEvent } from '../types/lem-events'
+import type { TimelineRound, TimelineVerdict } from '@/components/TimelineStrip'
 import { useSettings } from '@/store/settings'
 import { useRuntime } from '@/store/runtime'
 import { useLibrary } from '@/store/library'
@@ -24,6 +25,28 @@ const MOCK_QUESTIONS = [
 
 function ts(): string {
   return new Date().toISOString()
+}
+
+function verdictToTimeline(v: Verdict | null): TimelineVerdict {
+  if (v === 'build') return 'BUILD'
+  if (v === 'skip') return 'DONT'
+  if (v === 'unsure') return 'INSUFFICIENT'
+  return 'UNKNOWN'
+}
+
+function toTimelineRounds(rows: RunRow[]): TimelineRound[] {
+  return rows.map(r => ({
+    runId:       r.runId,
+    roundDepth:  r.roundDepth ?? 1,
+    verdict:     verdictToTimeline(r.verdict),
+    branchLabel: r.branchLabel ?? null,
+    parentRunId: r.parentRunId ?? null,
+  }))
+}
+
+function rootIdeaFromRounds(rows: RunRow[]): string {
+  const root = rows.find(r => (r.roundDepth ?? 1) === 1) ?? rows[0]
+  return root?.idea ?? ''
 }
 
 interface ConfirmationCardProps {
@@ -166,8 +189,52 @@ function ErrorBanner({ message }: { message: string }) {
   )
 }
 
+function RefineErrorToast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  return (
+    <div
+      data-refine-error
+      role="alert"
+      style={{
+        position:   'fixed',
+        bottom:     24,
+        left:       '50%',
+        transform:  'translateX(-50%)',
+        background: 'rgba(200, 40, 40, 0.96)',
+        color:      '#fff',
+        padding:    '12px 20px',
+        borderRadius: 10,
+        fontFamily: 'var(--t-font)',
+        fontSize:   14,
+        display:    'flex',
+        alignItems: 'center',
+        gap:        12,
+        boxShadow:  '0 4px 20px rgba(0,0,0,0.30)',
+        zIndex:     100,
+        maxWidth:   480,
+      }}
+    >
+      <span>⚠ {message}</span>
+      <button
+        aria-label="Dismiss error"
+        onClick={onDismiss}
+        style={{
+          background: 'transparent',
+          border:     'none',
+          color:      '#fff',
+          cursor:     'pointer',
+          fontSize:   16,
+          padding:    0,
+          opacity:    0.75,
+          lineHeight: 1,
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  )
+}
+
 export default function App() {
-  const claudePath = useSettings(s => s.claudePath)
   const loadSettings = useSettings(s => s.load)
   const [detectionState, setDetectionState] = useState<'pending' | 'found' | 'missing'>('pending')
 
@@ -187,14 +254,14 @@ export default function App() {
     detectClaude()
   }, [])
 
-  const initRun       = useRuntime(s => s.initRun)
-  const onPhaseStart  = useRuntime(s => s.onPhaseStart)
-  const onPhaseDone   = useRuntime(s => s.onPhaseDone)
+  const initRun        = useRuntime(s => s.initRun)
+  const onPhaseStart   = useRuntime(s => s.onPhaseStart)
+  const onPhaseDone    = useRuntime(s => s.onPhaseDone)
   const onPhaseSkipped = useRuntime(s => s.onPhaseSkipped)
-  const onRoleDone    = useRuntime(s => s.onRoleDone)
-  const failRun       = useRuntime(s => s.failRun)
-  const runs          = useRuntime(s => s.runs)
-  const activeRunId   = useRuntime(s => s.activeRunId)
+  const onRoleDone     = useRuntime(s => s.onRoleDone)
+  const failRun        = useRuntime(s => s.failRun)
+  const runs           = useRuntime(s => s.runs)
+  const activeRunId    = useRuntime(s => s.activeRunId)
 
   const loadLibrary  = useLibrary(s => s.load)
   const selectRun    = useLibrary(s => s.select)
@@ -208,16 +275,26 @@ export default function App() {
   const [allAnswered, setAllAnswered] = useState(false)
   const [errorMsg,    setErrorMsg]    = useState('')
 
-  const activeRunIdRef = useRef<string | null>(null)
+  const [currentIdeaId, setCurrentIdeaId] = useState<string | undefined>()
+  const [rounds,        setRounds]        = useState<TimelineRound[]>([])
+  const [rootIdeaText,  setRootIdeaText]  = useState('')
+  const [refineError,   setRefineError]   = useState<string | null>(null)
+
+  const activeRunIdRef    = useRef<string | null>(null)
+  const currentIdeaIdRef  = useRef<string | null>(null)
+
+  useEffect(() => {
+    activeRunIdRef.current = activeRunId
+  }, [activeRunId])
+
+  useEffect(() => {
+    currentIdeaIdRef.current = currentIdeaId ?? null
+  }, [currentIdeaId])
 
   useEffect(() => {
     loadSettings()
     loadLibrary()
   }, [loadSettings, loadLibrary])
-
-  useEffect(() => {
-    activeRunIdRef.current = activeRunId
-  }, [activeRunId])
 
   useEffect(() => {
     const off = window.lem.run.onEvent((rawEvent) => {
@@ -232,8 +309,16 @@ export default function App() {
         } else if (ev.kind === 'phase_done') {
           onPhaseDone(runId, pev)
           if (pev.phase_id === '4') {
-            loadLibrary()
-            setScreen('empty')
+            const ideaId = currentIdeaIdRef.current
+            void Promise.all([
+              loadLibrary(),
+              ideaId
+                ? window.lem.ideas.getRounds(ideaId).then(rawRounds => {
+                    setRounds(toTimelineRounds(rawRounds))
+                    setRootIdeaText(rootIdeaFromRounds(rawRounds))
+                  }).catch(err => console.error('Failed to reload rounds after refine:', err))
+                : Promise.resolve(),
+            ]).then(() => setScreen('brief')).catch(() => setScreen('brief'))
           }
         } else {
           onPhaseSkipped(runId, pev)
@@ -315,8 +400,8 @@ export default function App() {
     setAllAnswered(false)
   }
 
-  function handleSelectIdeaRound(ideaId: string, runId: string) {
-    void ideaId
+  async function handleSelectIdeaRound(ideaId: string, runId: string) {
+    setCurrentIdeaId(ideaId)
     selectRun(runId)
     setActiveId(runId)
     const runtimeRun = runs[runId]
@@ -326,11 +411,64 @@ export default function App() {
     }
     const item = libraryItems.find(r => r.runId === runId)
     if (item?.status === 'completed') {
+      try {
+        const rawRounds = await window.lem.ideas.getRounds(ideaId)
+        setRounds(toTimelineRounds(rawRounds))
+        setRootIdeaText(rootIdeaFromRounds(rawRounds))
+      } catch (err) {
+        console.error('Failed to load rounds for idea:', err)
+      }
       setScreen('brief')
     } else if (item?.status === 'running') {
       setScreen('theater')
     } else {
       setScreen('empty')
+    }
+  }
+
+  function handleRoundSelect(runId: string) {
+    setActiveId(runId)
+  }
+
+  async function handleContinue(req: Omit<RefineRequest, 'idea' | 'parentRunId'>) {
+    setRefineError(null)
+    try {
+      const idea: string = rootIdeaText || ideaText
+      const refineReq: RefineRequest = {
+        idea,
+        parentRunId: activeId,
+        branchLabel: '',
+        contextText: req.contextText,
+      }
+      const { runId } = await window.lem.run.refine(refineReq)
+      initRun(runId)
+      setActiveId(runId)
+      setScreen('theater')
+    } catch (err) {
+      setRefineError(
+        err instanceof Error ? err.message : 'Failed to start refinement. Please try again.',
+      )
+    }
+  }
+
+  async function handleBranch(req: Omit<RefineRequest, 'idea' | 'parentRunId'>) {
+    setRefineError(null)
+    try {
+      const idea: string = rootIdeaText || ideaText
+      const refineReq: RefineRequest = {
+        idea,
+        parentRunId: activeId,
+        ...(req.branchLabel ? { branchLabel: req.branchLabel } : {}),
+        contextText: req.contextText,
+      }
+      const { runId } = await window.lem.run.refine(refineReq)
+      initRun(runId)
+      setActiveId(runId)
+      setScreen('theater')
+    } catch (err) {
+      setRefineError(
+        err instanceof Error ? err.message : 'Failed to start branch. Please try again.',
+      )
     }
   }
 
@@ -348,7 +486,7 @@ export default function App() {
     switch (screen) {
       case 'intake-input': return 'New Idea'
       case 'intake-chat':  return ideaText || 'Refining…'
-      case 'theater':      return ideaText || 'Analyzing…'
+      case 'theater':      return rootIdeaText || ideaText || 'Analyzing…'
       case 'brief': {
         const item = libraryItems.find(r => r.runId === activeId)
         return item?.idea ?? 'Analysis'
@@ -389,7 +527,7 @@ export default function App() {
         return (
           <Theater
             run={run}
-            idea={ideaText}
+            idea={rootIdeaText || ideaText}
             onStop={handleStop}
           />
         )
@@ -418,7 +556,11 @@ export default function App() {
             calloutStats={{ recommendation: verdictLabel, confidence: '—', firstMilestone: '—' }}
             signalPills={[]}
             meta={{ version: '0.1.0', phases: 11, specialists: 3, date: item.createdAt.split('T')[0] ?? '—' }}
-            onRefineAgain={handleNewIdea}
+            rounds={rounds}
+            currentRunId={activeId ?? ''}
+            onRoundSelect={handleRoundSelect}
+            onContinue={handleContinue}
+            onBranch={handleBranch}
           />
         )
       }
@@ -472,6 +614,12 @@ export default function App() {
           {renderScreen()}
         </div>
       </div>
+      {refineError && (
+        <RefineErrorToast
+          message={refineError}
+          onDismiss={() => setRefineError(null)}
+        />
+      )}
     </AppShell>
   )
 }
