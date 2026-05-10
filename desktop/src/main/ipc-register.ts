@@ -6,7 +6,7 @@ import { readSettings, writeSettings } from './settings'
 import { OrchestratorBridge } from './orchestrator-bridge'
 import { registerOrchestratorHandlers } from './orchestrator-ipc'
 
-const bridge = new OrchestratorBridge()
+export const bridge = new OrchestratorBridge()
 
 export function registerAllHandlers(ipcMain: IpcMain): void {
   ipcMain.handle(IPC.SETTINGS_GET, () => readSettings())

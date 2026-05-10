@@ -1,4 +1,4 @@
-import type { Settings, LibraryItem } from '../shared/types'
+import type { Settings, LibraryItem, Idea, RunRow, RefineRequest, RefineResponse } from '../shared/types'
 import type { LogLine, ProgressEvent } from '../types/lem-events'
 import type { BriefData } from '../main/workspace-reader'
 
@@ -21,6 +21,12 @@ declare global {
       library: {
         list(): Promise<LibraryItem[]>
       }
+      ideas: {
+        list(): Promise<Idea[]>
+        getRounds(ideaId: string): Promise<RunRow[]>
+        getDag(ideaId: string): Promise<RunRow[]>
+        rename(ideaId: string, newTitle: string): Promise<void>
+      }
       run: {
         start(args: { idea: string; stub?: boolean; replaySpeed?: number }): Promise<string>
         cancel(runId: string): Promise<void>
@@ -28,6 +34,8 @@ declare global {
           callback: (event: ProgressEvent | { kind: string; [key: string]: unknown }) => void,
         ): () => void
         onLog(callback: (logLine: LogLine) => void): () => void
+        refine(req: RefineRequest): Promise<RefineResponse>
+        setBranchLabel(runId: string, label: string | null): Promise<void>
       }
       workspace: {
         readBrief(workspacePath: string): Promise<BriefData>

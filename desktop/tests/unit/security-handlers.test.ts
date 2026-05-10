@@ -62,7 +62,7 @@ vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn() },
 }))
 
-vi.mock('../../src/main/ipc-register', () => ({ registerAllHandlers: vi.fn() }))
+vi.mock('../../src/main/ipc-register', () => ({ registerAllHandlers: vi.fn(), bridge: {} }))
 vi.mock('../../src/main/claude-ipc', () => ({ registerClaudeHandlers: vi.fn() }))
 vi.mock('../../src/main/library-db', () => ({
   LibraryDB: vi.fn(function (this: { close: () => void }) {
@@ -72,6 +72,7 @@ vi.mock('../../src/main/library-db', () => ({
 vi.mock('../../src/main/library-ipc', () => ({ registerLibraryHandlers: vi.fn() }))
 vi.mock('../../src/main/workspace-reader', () => ({ WorkspaceReader: vi.fn(function () {}) }))
 vi.mock('../../src/main/workspace-ipc', () => ({ registerWorkspaceHandlers: vi.fn() }))
+vi.mock('../../src/main/ipc/ideas', () => ({ registerIdeasHandlers: vi.fn() }))
 
 beforeAll(async () => {
   await import('../../src/main/index')
